@@ -199,21 +199,32 @@ function App() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [activeSession?.items.length]);
 
-  // Reload transcript from disk when switching to a session that has a saved
-  // sessionId but no items yet (i.e. first open after an app restart).
+  // When switching to a session with no items:
+  //   1. If sessionId already known → load history directly.
+  //   2. If no sessionId → auto-discover the most recent session for this worktree path,
+  //      then load its history. This handles sessions started outside the app (Conductor, terminal).
   useEffect(() => {
     if (!activeSession || !activeWt) return;
-    if (!activeSession.sessionId || activeSession.items.length > 0) return;
-    invoke<string[]>("load_session_history", { sessionId: activeSession.sessionId, cwd: activeWt.path })
-      .then(lines => {
-        const items: Item[] = [];
-        for (const line of lines) {
-          const parsed = parseLine("claude", "stdout", line);
-          items.push(...parsed.items);
-        }
-        if (items.length) patchSession(activeSession.id, () => ({ items }));
-      })
-      .catch(() => {});
+    if (activeSession.items.length > 0) return;
+
+    async function loadHistory(sessId: string) {
+      const lines = await invoke<string[]>("load_session_history", { sessionId: sessId, cwd: activeWt!.path });
+      const items: Item[] = [];
+      for (const line of lines) {
+        const parsed = parseLine("claude", "stdout", line);
+        items.push(...parsed.items);
+      }
+      if (items.length) patchSession(activeSession!.id, () => ({ items, sessionId: sessId }));
+    }
+
+    if (activeSession.sessionId) {
+      loadHistory(activeSession.sessionId).catch(() => {});
+    } else {
+      // auto-discover most recent session for this path
+      invoke<string>("latest_session_id", { cwd: activeWt.path })
+        .then(id => { if (id) loadHistory(id); })
+        .catch(() => {});
+    }
   }, [activeSession?.id]);
 
   function patchSession(sessId: string, patch: (s: Session) => Partial<Session>) {

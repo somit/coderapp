@@ -35,22 +35,45 @@ fn home() -> String {
 
 // ---- session history replay ----
 
-/// Read a Claude session `.jsonl` and return rendered lines for the transcript.
-/// Returns lines in the same shape the frontend's parseLine("claude","stdout",…) would produce,
-/// so the frontend can replay them without a live process.
+fn claude_project_dir(cwd: &str) -> String {
+    let slug = cwd.replace('/', "-");
+    format!("{}/.claude/projects/{}", home(), slug)
+}
+
+/// Read a Claude session `.jsonl` and return lines for the frontend to parse.
 #[tauri::command]
 fn load_session_history(session_id: String, cwd: String) -> Vec<String> {
-    // ~/.claude/projects/<cwd-with-/-as--> /<session_id>.jsonl
-    let slug = cwd.replace('/', "-");
-    let path = format!("{}/.claude/projects/{}/{}.jsonl", home(), slug, session_id);
+    let path = format!("{}/{}.jsonl", claude_project_dir(&cwd), session_id);
     let f = match std::fs::File::open(&path) {
         Ok(f) => f,
         Err(_) => return vec![],
     };
-    StdBufReader::new(f)
-        .lines()
-        .filter_map(|l| l.ok())
-        .collect()
+    StdBufReader::new(f).lines().filter_map(|l| l.ok()).collect()
+}
+
+/// Find the most recent Claude session id for a given working directory.
+/// Returns empty string if none found.
+#[tauri::command]
+fn latest_session_id(cwd: String) -> String {
+    let dir = claude_project_dir(&cwd);
+    let read = match std::fs::read_dir(&dir) {
+        Ok(r) => r,
+        Err(_) => return String::new(),
+    };
+    let mut best: Option<(std::time::SystemTime, String)> = None;
+    for entry in read.filter_map(|e| e.ok()) {
+        let p = entry.path();
+        if p.extension().and_then(|s| s.to_str()) != Some("jsonl") { continue; }
+        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        if let Ok(meta) = entry.metadata() {
+            if let Ok(modified) = meta.modified() {
+                if best.as_ref().map_or(true, |(t, _)| modified > *t) {
+                    best = Some((modified, stem));
+                }
+            }
+        }
+    }
+    best.map(|(_, id)| id).unwrap_or_default()
 }
 
 // ---- git worktree management ----
@@ -313,6 +336,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             send_message,
             load_session_history,
+            latest_session_id,
             list_worktrees,
             create_worktree,
             remove_worktree
