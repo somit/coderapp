@@ -19,6 +19,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 // ---- PTY session registry ----
 struct PtySession {
+    master: Box<dyn portable_pty::MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     #[allow(dead_code)]
     child: Box<dyn portable_pty::Child + Send>,
@@ -658,7 +659,7 @@ fn pty_create(app: AppHandle, id: String, cwd: String, cols: u16, rows: u16) -> 
     });
 
     let state = app.state::<PtyState>();
-    state.0.lock().unwrap().insert(id, PtySession { writer, child });
+    state.0.lock().unwrap().insert(id, PtySession { master: pair.master, writer, child });
     Ok(())
 }
 
@@ -675,13 +676,11 @@ fn pty_write(app: AppHandle, id: String, data: String) -> Result<(), String> {
 
 #[tauri::command]
 fn pty_resize(app: AppHandle, id: String, cols: u16, rows: u16) -> Result<(), String> {
-    // portable-pty resize requires the master; re-create via state is complex —
-    // simplest approach is to send stty resize escape via the writer
     let state = app.state::<PtyState>();
-    let mut map = state.0.lock().unwrap();
-    if let Some(sess) = map.get_mut(&id) {
-        let resize = format!("\x1b[8;{};{}t", rows, cols);
-        sess.writer.write_all(resize.as_bytes()).ok();
+    let map = state.0.lock().unwrap();
+    if let Some(sess) = map.get(&id) {
+        sess.master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
