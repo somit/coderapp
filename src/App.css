@@ -258,6 +258,15 @@ body {
   direction: rtl;
 }
 .code-pane-path.dim { color: #555; }
+.view-tabs { display: flex; gap: 2px; }
+.view-tab {
+  background: transparent; border: 1px solid #3c3c3c;
+  color: #666; border-radius: 4px; padding: 2px 8px;
+  font: inherit; font-size: 11px; cursor: pointer;
+}
+.view-tab:hover { color: #ccc; }
+.view-tab.active { color: #fff; border-color: var(--accent); background: rgba(47,129,247,0.2); }
+
 .code-open-btn {
   background: transparent;
   border: 1px solid #3c3c3c;

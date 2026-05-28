@@ -157,6 +157,36 @@ fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// Return the git HEAD version of a file (original before agent edits).
+/// Returns empty string if file is untracked or repo has no HEAD.
+#[tauri::command]
+fn git_file_original(root: String, path: String) -> String {
+    // make path relative to repo root
+    let rel = path.strip_prefix(&root)
+        .map(|p| p.trim_start_matches('/'))
+        .unwrap_or(&path);
+    let out = std::process::Command::new("git")
+        .current_dir(&root)
+        .args(["show", &format!("HEAD:{}", rel)])
+        .output();
+    match out {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Return full git diff for the worktree (staged + unstaged).
+#[tauri::command]
+fn git_diff(root: String) -> String {
+    let staged = std::process::Command::new("git")
+        .current_dir(&root)
+        .args(["diff", "HEAD"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
+    staged
+}
+
 #[derive(Serialize, Clone)]
 struct FileNode {
     name: String,
@@ -500,6 +530,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             send_message,
             read_file,
+            git_file_original,
+            git_diff,
             list_files,
             list_dir,
             load_session_history,

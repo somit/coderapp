@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import Editor from "@monaco-editor/react";
+import Editor, { DiffEditor } from "@monaco-editor/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -216,66 +216,127 @@ function langFromPath(p: string): string {
   return map[ext] ?? "plaintext";
 }
 
-function CodePane({ filePath, repoPath, onOpenFile }: {
+type ViewMode = "editor" | "diff" | "git-diff";
+
+function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
   filePath: string;
   repoPath: string;
   onOpenFile: (fp: string) => void;
+  agentRunning: boolean;
 }) {
   const [content, setContent] = useState<string | null>(null);
+  const [original, setOriginal] = useState<string>("");
+  const [gitDiff, setGitDiff] = useState<string>("");
   const [err, setErr] = useState("");
   const [resolvedPath, setResolvedPath] = useState("");
+  const [view, setView] = useState<ViewMode>("editor");
+
+  // load file content
+  async function loadFile(fp: string) {
+    try {
+      const c = await invoke<string>("read_file", { path: fp });
+      setContent(c); setErr(""); setResolvedPath(fp);
+    } catch {
+      try {
+        const rel = `${repoPath}/${fp}`;
+        const c = await invoke<string>("read_file", { path: rel });
+        setContent(c); setErr(""); setResolvedPath(rel);
+      } catch (e) { setErr(String(e)); setContent(null); }
+    }
+  }
+
+  // load git original for diff
+  async function loadOriginal(fp: string) {
+    const orig = await invoke<string>("git_file_original", { root: repoPath, path: fp }).catch(() => "");
+    setOriginal(orig);
+  }
+
+  // load full git diff
+  async function loadGitDiff() {
+    const d = await invoke<string>("git_diff", { root: repoPath }).catch(() => "");
+    setGitDiff(d);
+  }
 
   useEffect(() => {
     if (!filePath) { setContent(null); setErr(""); setResolvedPath(""); return; }
-    // try absolute, then relative to repoPath
-    invoke<string>("read_file", { path: filePath })
-      .then(c => { setContent(c); setErr(""); setResolvedPath(filePath); })
-      .catch(() => {
-        const rel = `${repoPath}/${filePath}`;
-        invoke<string>("read_file", { path: rel })
-          .then(c => { setContent(c); setErr(""); setResolvedPath(rel); })
-          .catch(e => { setErr(String(e)); setContent(null); });
-      });
+    loadFile(filePath);
+    loadOriginal(filePath);
   }, [filePath]);
+
+  // auto-refresh content + diff when agent is running
+  useEffect(() => {
+    if (!agentRunning || !resolvedPath) return;
+    const interval = setInterval(() => {
+      loadFile(resolvedPath);
+      if (view === "diff") loadOriginal(resolvedPath);
+      if (view === "git-diff") loadGitDiff();
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [agentRunning, resolvedPath, view]);
+
+  useEffect(() => {
+    if (view === "git-diff") loadGitDiff();
+  }, [view, repoPath]);
 
   async function pickFile() {
     const picked = await open({ title: "Open file" });
     if (picked && typeof picked === "string") onOpenFile(picked);
   }
 
+  const relPath = resolvedPath ? resolvedPath.replace(repoPath + "/", "") : "";
+
   return (
     <div className="code-pane">
-      <FileTree root={repoPath} onSelect={fp => { onOpenFile(fp); }} activeFile={resolvedPath} />
+      <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />
       <div className="code-editor-area">
         <div className="code-pane-header">
-          {resolvedPath
-            ? <span className="code-pane-path">{resolvedPath.replace(repoPath + "/", "")}</span>
+          {relPath
+            ? <span className="code-pane-path">{relPath}</span>
             : <span className="code-pane-path dim">no file open</span>
           }
-          <button className="code-open-btn" onClick={pickFile} title="Open file">open…</button>
+          <div className="view-tabs">
+            {(["editor","diff","git-diff"] as ViewMode[]).map(v => (
+              <button key={v} className={`view-tab ${view === v ? "active" : ""}`}
+                onClick={() => setView(v)}>
+                {v === "editor" ? "Editor" : v === "diff" ? "Diff" : "Git Diff"}
+              </button>
+            ))}
+          </div>
+          <button className="code-open-btn" onClick={pickFile}>open…</button>
         </div>
         {err && <div className="code-pane-err">{err}</div>}
-        {!err && content !== null
-          ? <Editor
-              height="100%"
-              theme="vs-dark"
-              language={langFromPath(resolvedPath)}
-              value={content}
-              options={{
-                readOnly: false,
-                minimap: { enabled: true },
-                fontSize: 12,
-                lineNumbers: "on",
-                scrollBeyondLastLine: false,
-                wordWrap: "off",
-                automaticLayout: true,
-              }}
-            />
-          : !err && <div className="code-pane-empty">
-              <span>Click a file in the tree</span>
-              <span className="dim">or the agent will open one automatically</span>
-            </div>
-        }
+
+        {!err && view === "editor" && (
+          content !== null
+            ? <Editor height="100%" theme="vs-dark" language={langFromPath(resolvedPath)}
+                value={content}
+                options={{ readOnly: false, minimap: { enabled: true }, fontSize: 12,
+                  lineNumbers: "on", scrollBeyondLastLine: false, automaticLayout: true }} />
+            : <div className="code-pane-empty">
+                <span>Click a file in the tree</span>
+                <span className="dim">or the agent will open one automatically</span>
+              </div>
+        )}
+
+        {!err && view === "diff" && (
+          content !== null
+            ? <DiffEditor height="100%" theme="vs-dark" language={langFromPath(resolvedPath)}
+                original={original} modified={content}
+                options={{ readOnly: true, renderSideBySide: true, fontSize: 12, automaticLayout: true }} />
+            : <div className="code-pane-empty"><span>Open a file to diff</span></div>
+        )}
+
+        {view === "git-diff" && (
+          gitDiff
+            ? <Editor height="100%" theme="vs-dark" language="diff"
+                value={gitDiff}
+                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12,
+                  lineNumbers: "off", scrollBeyondLastLine: false, automaticLayout: true,
+                  wordWrap: "off" }} />
+            : <div className="code-pane-empty">
+                <span>{agentRunning ? "Waiting for changes…" : "No uncommitted changes"}</span>
+              </div>
+        )}
       </div>
     </div>
   );
@@ -787,6 +848,7 @@ function App() {
             <CodePane
               filePath={activeSession.activeFile ?? ""}
               repoPath={activeWt.path}
+              agentRunning={activeSession.running}
               onOpenFile={fp => patchSession(activeSession.id, () => ({ activeFile: fp }))}
             />
             </SplitPane>
