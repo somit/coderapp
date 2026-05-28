@@ -87,6 +87,7 @@ body {
   padding: 2px 0;
   cursor: pointer;
   user-select: none;
+  width: 100%;
 }
 .sys-bar:hover .sys-label { color: #666; }
 .sys-item { display: flex; align-items: center; gap: 4px; font-size: 11px; }
@@ -94,7 +95,8 @@ body {
 .sys-val { color: var(--dim); font-variant-numeric: tabular-nums; min-width: 32px; }
 .sys-val.warm { color: var(--tool); }
 .sys-val.hot  { color: var(--err); }
-.sys-arrow { color: #333; font-size: 9px; margin-left: auto; }
+.sys-arrow { color: var(--dim); font-size: 10px; margin-left: auto; }
+.sys-bar:hover .sys-arrow { color: var(--text); }
 
 /* process list */
 .proc-list {
