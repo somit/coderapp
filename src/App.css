@@ -257,7 +257,17 @@ body {
 .item.text pre { color: var(--accent); }            /* user prompt echo */
 .item.system pre { color: var(--dim); }
 .item.assistant pre { color: var(--text); }
-.item.reasoning pre { color: var(--dim); font-style: italic; }
+.item.reasoning { padding: 2px 0; }
+.think-header {
+  display: flex; align-items: baseline; gap: 6px;
+  cursor: pointer; padding: 3px 4px; border-radius: 4px;
+  font-size: 12px; user-select: none;
+}
+.think-header:hover { background: #1c2128; }
+.think-arrow { color: var(--dim); font-size: 10px; }
+.think-label { color: var(--dim); font-style: italic; }
+.think-preview { color: #4a5568; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 480px; }
+.think-body { color: var(--dim); font-style: italic; margin: 4px 0 0 16px; font-size: 12px; }
 .item.tool pre { color: var(--tool); }
 .item.tool_result pre {
   color: var(--dim);

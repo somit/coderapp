@@ -66,6 +66,21 @@ function loadSlash(): Record<AgentId, string[]> {
   return { ...SEED_SLASH };
 }
 
+function ThinkingBlock({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const preview = text.slice(0, 80).replace(/\n/g, " ") + (text.length > 80 ? "…" : "");
+  return (
+    <div className="item reasoning">
+      <div className="think-header" onClick={() => setOpen(o => !o)}>
+        <span className="think-arrow">{open ? "▾" : "▶"}</span>
+        <span className="think-label">thinking</span>
+        {!open && <span className="think-preview">{preview}</span>}
+      </div>
+      {open && <pre className="think-body">{text}</pre>}
+    </div>
+  );
+}
+
 function App() {
   const [projects, setProjects] = useState<Project[]>(loadProjects);
   // activeId = worktree id
@@ -392,9 +407,11 @@ function App() {
                   <b>{activeSession.agent}</b> on <b>{activeWt.branch}</b>. Type a prompt or <b>/</b> for commands.
                 </div>
               )}
-              {activeSession.items.map((it, i) => (
-                <div key={i} className={`item ${it.kind}`}><pre>{it.text}</pre></div>
-              ))}
+              {activeSession.items.map((it, i) =>
+                it.kind === "reasoning"
+                  ? <ThinkingBlock key={i} text={it.text} />
+                  : <div key={i} className={`item ${it.kind}`}><pre>{it.text}</pre></div>
+              )}
               {activeSession.running && <div className="item running"><pre>… running</pre></div>}
               <div ref={endRef} />
             </main>
