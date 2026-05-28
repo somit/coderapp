@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { AGENTS, AgentId, Item, parseLine, parseTranscriptLine, parseCodexTranscriptLine, SEED_SLASH } from "./agents";
+import { AGENTS, AgentId, Item, Usage, parseLine, parseTranscriptLine, parseCodexTranscriptLine, SEED_SLASH } from "./agents";
 import "./App.css";
 
 interface StreamLine { run_id: string; stream: "stdout" | "stderr"; line: string; }
@@ -38,6 +38,25 @@ interface Project {
 
 const PROJ_KEY = "coderapp.projects.v2";
 const SLASH_KEY = "coderapp.slash";
+const USAGE_KEY = "coderapp.usage"; // { [sessionId]: Usage[] }
+
+function loadUsage(): Record<string, Usage[]> {
+  try { const r = localStorage.getItem(USAGE_KEY); if (r) return JSON.parse(r); } catch {}
+  return {};
+}
+function sumUsage(turns: Usage[]): Usage {
+  return turns.reduce((a, b) => ({
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    costUsd: a.costUsd + b.costUsd,
+  }), { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costUsd: 0 });
+}
+function fmt(u: Usage) {
+  if (!u.costUsd && !u.inputTokens) return "";
+  if (u.costUsd) return `$${u.costUsd.toFixed(4)}`;
+  return `${((u.inputTokens + u.outputTokens) / 1000).toFixed(1)}k tok`;
+}
 
 function newSession(agent: AgentId = "claude"): Session {
   return { id: crypto.randomUUID(), agent, yolo: true, sessionId: "", items: [], running: false };
@@ -142,6 +161,7 @@ function App() {
   const [addingTo, setAddingTo] = useState("");
   const [newName, setNewName] = useState("");
   const [err, setErr] = useState("");
+  const [usageMap, setUsageMap] = useState<Record<string, Usage[]>>(loadUsage);
 
   const runMap = useRef<Record<string, string>>({}); // run_id -> session id
   const runAgent = useRef<Record<string, AgentId>>({});
@@ -168,6 +188,7 @@ function App() {
     localStorage.setItem(PROJ_KEY, JSON.stringify(persist));
   }, [projects]);
   useEffect(() => { localStorage.setItem(SLASH_KEY, JSON.stringify(slashByAgent)); }, [slashByAgent]);
+  useEffect(() => { localStorage.setItem(USAGE_KEY, JSON.stringify(usageMap)); }, [usageMap]);
 
   // Fetch live slash commands from claude init on startup (uses any valid cwd)
   useEffect(() => {
@@ -185,6 +206,11 @@ function App() {
       const agent = runAgent.current[run_id] ?? "claude";
       const parsed = parseLine(agent, stream, line);
       if (parsed.slashCommands) setSlashByAgent(prev => ({ ...prev, [agent]: parsed.slashCommands! }));
+      if (parsed.usage) {
+        // key by the session's claude/codex sessionId if known, else by our internal session id
+        const key = parsed.sessionId ?? sessId;
+        setUsageMap(prev => ({ ...prev, [key]: [...(prev[key] ?? []), parsed.usage!] }));
+      }
       if (parsed.sessionId || parsed.items.length) {
         patchSession(sessId, s => ({
           sessionId: parsed.sessionId ?? s.sessionId,
@@ -401,10 +427,18 @@ function App() {
         </div>
         <div className="ws-list">
           {projects.length === 0 && <div className="side-empty">Click + to pick a repo folder.</div>}
-          {projects.map(p => (
+          {projects.map(p => {
+            const projUsage = sumUsage(
+              p.worktrees.flatMap(w => w.sessions.flatMap(s =>
+                usageMap[s.sessionId] ?? usageMap[s.id] ?? []
+              ))
+            );
+            const projCost = fmt(projUsage);
+            return (
             <div key={p.id} className="project">
               <div className="proj-head">
                 <span className="proj-name" title={p.rootPath}>{p.name}</span>
+                {projCost && <span className="proj-cost">{projCost}</span>}
                 <button className="add small" title="Add worktree" onClick={() => { setAddingTo(addingTo === p.id ? "" : p.id); setNewName(""); }}>+</button>
               </div>
               {addingTo === p.id && (
@@ -428,7 +462,8 @@ function App() {
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </div>
         {err && <div className="side-err" onClick={() => setErr("")}>{err}</div>}
       </aside>
@@ -441,16 +476,21 @@ function App() {
           <>
             {/* session tabs */}
             <div className="session-tabs">
-              {activeWt.sessions.map(s => (
-                <div key={s.id} className={`stab ${s.id === activeSession.id ? "active" : ""} ${s.running ? "running" : ""}`}
-                  onClick={() => switchSession(s.id)}>
-                  <span className={`dot-sm ${s.running ? "on" : ""}`} />
-                  {s.agent}
-                  {activeWt.sessions.length > 1 && (
-                    <button className="tx" onClick={e => { e.stopPropagation(); removeSession(s.id); }}>×</button>
-                  )}
-                </div>
-              ))}
+              {activeWt.sessions.map(s => {
+                const sessUsage = sumUsage(usageMap[s.sessionId] ?? usageMap[s.id] ?? []);
+                const costLabel = fmt(sessUsage);
+                return (
+                  <div key={s.id} className={`stab ${s.id === activeSession.id ? "active" : ""} ${s.running ? "running" : ""}`}
+                    onClick={() => switchSession(s.id)}>
+                    <span className={`dot-sm ${s.running ? "on" : ""}`} />
+                    {s.agent}
+                    {costLabel && <span className="cost-badge">{costLabel}</span>}
+                    {activeWt.sessions.length > 1 && (
+                      <button className="tx" onClick={e => { e.stopPropagation(); removeSession(s.id); }}>×</button>
+                    )}
+                  </div>
+                );
+              })}
               {/* add session buttons */}
               <div className="stab-add">
                 {AGENTS.map(a => (

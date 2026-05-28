@@ -28,10 +28,18 @@ export interface Item {
   text: string;
 }
 
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  costUsd: number;
+}
+
 export interface Parsed {
   items: Item[];
-  sessionId?: string; // set when this line reveals the session/thread id
-  slashCommands?: string[]; // set when the stream reveals available slash commands
+  sessionId?: string;
+  slashCommands?: string[];
+  usage?: Usage; // set on the final result event of a turn
 }
 
 // Shown before the first turn populates the live list from the init event.
@@ -89,7 +97,15 @@ function parseClaude(line: string): Parsed {
     }
   } else if (ev.type === "result") {
     const cost = typeof ev.total_cost_usd === "number" ? `$${ev.total_cost_usd.toFixed(4)}` : "";
+    const u = ev.usage ?? {};
+    const usage: Usage = {
+      inputTokens: (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
+      outputTokens: u.output_tokens ?? 0,
+      cacheReadTokens: u.cache_read_input_tokens ?? 0,
+      costUsd: ev.total_cost_usd ?? 0,
+    };
     items.push({ kind: "result", text: `✓ ${ev.subtype} · ${ev.num_turns ?? "?"} turns · ${cost}` });
+    return { items, sessionId, slashCommands, usage };
   }
   return { items, sessionId, slashCommands };
 }
@@ -122,11 +138,17 @@ function parseCodex(line: string): Parsed {
     }
     case "turn.completed": {
       const u = ev.usage ?? {};
+      const usage: Usage = {
+        inputTokens: u.input_tokens ?? 0,
+        outputTokens: u.output_tokens ?? 0,
+        cacheReadTokens: u.cached_input_tokens ?? 0,
+        costUsd: 0, // codex doesn't expose cost in stream
+      };
       items.push({
         kind: "result",
         text: `✓ in ${u.input_tokens ?? "?"} / out ${u.output_tokens ?? "?"} tokens`,
       });
-      break;
+      return { items, usage };
     }
   }
   return { items, sessionId };

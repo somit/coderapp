@@ -166,6 +166,18 @@ body {
 }
 .ghost-sm:hover { color: var(--text); border-color: #8b949e; }
 
+/* ---- token / cost badges ---- */
+.cost-badge {
+  font-size: 10px; color: var(--green);
+  background: rgba(63, 185, 80, 0.1);
+  border: 1px solid rgba(63, 185, 80, 0.25);
+  border-radius: 4px; padding: 1px 5px;
+}
+.proj-cost {
+  font-size: 10px; color: var(--dim);
+  margin-left: auto; padding-right: 2px;
+}
+
 /* main pane to the right of the sidebar */
 .pane {
   flex: 1;
