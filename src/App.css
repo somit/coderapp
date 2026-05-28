@@ -166,6 +166,27 @@ body {
 }
 .ghost-sm:hover { color: var(--text); border-color: #8b949e; }
 
+/* ---- layout presets ---- */
+.layout-presets {
+  display: flex;
+  gap: 2px;
+  padding: 0 6px;
+  border-right: 1px solid var(--border);
+  margin-right: 4px;
+}
+.layout-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #555;
+  border-radius: 4px;
+  padding: 2px 5px;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+.layout-btn:hover { color: var(--text); border-color: var(--border); background: #1c2128; }
+
 /* ---- split: chat + editor ---- */
 .split {
   flex: 1;
@@ -207,7 +228,7 @@ body {
   width: 200px;
   flex-shrink: 0;
   background: #252526;
-  border-left: 1px solid #3c3c3c;
+  border-right: 1px solid #3c3c3c;
   display: flex;
   flex-direction: column;
   overflow: hidden;

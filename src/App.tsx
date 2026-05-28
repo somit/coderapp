@@ -129,8 +129,11 @@ function TermPanel({ wtId, cwd, open, height, onToggle, onResize }: {
   );
 }
 
-function SplitPane({ children }: { children: React.ReactNode }) {
-  const [chatWidth, setChatWidth] = useState(420);
+function SplitPane({ children, chatWidth, onChatWidthChange }: {
+  children: React.ReactNode;
+  chatWidth: number;
+  onChatWidthChange: (w: number) => void;
+}) {
   const dragging = useRef(false);
   const startX = useRef(0);
   const startW = useRef(0);
@@ -148,28 +151,38 @@ function SplitPane({ children }: { children: React.ReactNode }) {
       if (!dragging.current || !containerRef.current) return;
       const totalW = containerRef.current.offsetWidth;
       const delta = e.clientX - startX.current;
-      const next = Math.min(Math.max(startW.current + delta, 200), totalW - 200);
-      setChatWidth(next);
+      const next = Math.min(Math.max(startW.current + delta, 0), totalW);
+      onChatWidthChange(next);
     };
     const onUp = () => { dragging.current = false; };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, []);
+  }, [chatWidth]);
 
   const arr = React.Children.toArray(children);
   const left = arr[0];
   const right = arr[1];
 
+  const totalW = containerRef.current?.offsetWidth ?? 800;
+  const codeHidden = chatWidth >= totalW;
+  const chatHidden = chatWidth <= 0;
+
   return (
     <div className="split" ref={containerRef}>
-      <div style={{ width: chatWidth, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {left}
-      </div>
-      {right && <>
+      {!chatHidden && (
+        <div style={{ width: chatWidth, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {left}
+        </div>
+      )}
+      {right && !codeHidden && !chatHidden && (
         <div className="split-handle" onMouseDown={onMouseDown} />
-        {right}
-      </>}
+      )}
+      {right && !codeHidden && (
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", minWidth: 0 }}>
+          {right}
+        </div>
+      )}
     </div>
   );
 }
@@ -329,6 +342,7 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
 
   return (
     <div className="code-pane">
+      <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />
       <div className="code-editor-area">
         <div className="code-pane-header">
           {relPath
@@ -379,7 +393,6 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
               </div>
         )}
       </div>
-      <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />
     </div>
   );
 }
@@ -463,6 +476,8 @@ function App() {
   const [usageMap, setUsageMap] = useState<Record<string, Usage[]>>(loadUsage);
   const [termOpen, setTermOpen] = useState(false);
   const [termHeight, setTermHeight] = useState(220);
+  const [chatWidth, setChatWidth] = useState(420);
+  const paneRef = useRef<HTMLDivElement>(null);
 
   const runMap = useRef<Record<string, string>>({}); // run_id -> session id
   const runAgent = useRef<Record<string, AgentId>>({});
@@ -772,12 +787,12 @@ function App() {
       </aside>
 
       {/* ---- main pane (chat + editor split) ---- */}
-      <div className="pane">
+      <div className="pane" ref={paneRef}>
         {!activeWt || !activeSession ? (
           <div className="empty">Add a project from the sidebar to start.</div>
         ) : (
           <>
-            {/* session tabs */}
+            {/* session tabs + layout presets */}
             <div className="session-tabs">
               {activeWt.sessions.map(s => {
                 const sessUsage = sumUsage(usageMap[s.sessionId] ?? usageMap[s.id] ?? []);
@@ -794,6 +809,25 @@ function App() {
                   </div>
                 );
               })}
+              {/* layout presets */}
+              <div className="layout-presets">
+                {([
+                  { label: "⬛▫", title: "Chat 2/3 · Code 1/3", chat: 2/3 },
+                  { label: "▪▪", title: "50 / 50",              chat: 1/2 },
+                  { label: "▫⬛", title: "Chat 1/3 · Code 2/3", chat: 1/3 },
+                  { label: "⬛", title: "Chat only",             chat: 1   },
+                  { label: "▫", title: "Code only",              chat: 0   },
+                ] as const).map(p => (
+                  <button key={p.label} className="layout-btn" title={p.title}
+                    onClick={() => {
+                      const total = paneRef.current?.offsetWidth ?? 800;
+                      setChatWidth(Math.round(total * p.chat));
+                    }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
               {/* add session buttons */}
               <div className="stab-add">
                 {AGENTS.map(a => (
@@ -821,7 +855,7 @@ function App() {
               {resumeNote && <span className="note">{resumeNote}</span>}
             </div>
 
-            <SplitPane>
+            <SplitPane chatWidth={chatWidth} onChatWidthChange={setChatWidth}>
             <div className="split-chat">
             <main className="transcript">
               {activeSession.items.length === 0 && (
