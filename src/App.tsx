@@ -817,7 +817,6 @@ function App() {
         </div>
         {err && <div className="side-err" onClick={() => setErr("")}>{err}</div>}
         <div className="side-footer">
-          <SysBar />
           <div className="side-footer-row">
             <div className="layout-presets side-presets">
               {([
@@ -843,6 +842,7 @@ function App() {
               {awake ? "☕" : "💤"}
             </button>
           </div>
+          <SysBar />
         </div>
       </aside>
 
