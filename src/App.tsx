@@ -785,6 +785,17 @@ function App() {
           })}
         </div>
         {err && <div className="side-err" onClick={() => setErr("")}>{err}</div>}
+        <div className="side-footer">
+          <button
+            className={`awake-btn ${awake ? "on" : ""}`}
+            title={awake ? "Mac awake — click to allow sleep" : "Click to keep Mac awake"}
+            onClick={() => {
+              if (awake) { invoke("caffeinate_off").then(() => setAwake(false)); }
+              else { invoke("caffeinate_on").then(() => setAwake(true)).catch(() => {}); }
+            }}>
+            {awake ? "☕ awake" : "💤 sleep"}
+          </button>
+        </div>
       </aside>
 
       {/* ---- main pane (chat + editor split) ---- */}
@@ -845,15 +856,6 @@ function App() {
               </label>
               <button className="ghost" onClick={() => patchActiveSession({ sessionId: "", items: [] })}
                 disabled={activeSession.running}>new session</button>
-              <button
-                className={`awake-btn ${awake ? "on" : ""}`}
-                title={awake ? "Mac awake — click to allow sleep" : "Click to keep Mac awake"}
-                onClick={() => {
-                  if (awake) { invoke("caffeinate_off").then(() => setAwake(false)); }
-                  else { invoke("caffeinate_on").then(() => setAwake(true)).catch(() => {}); }
-                }}>
-                {awake ? "☕ awake" : "💤 sleep"}
-              </button>
             </header>
 
             <div className="meta">
