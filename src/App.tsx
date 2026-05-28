@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
 import Editor, { DiffEditor } from "@monaco-editor/react";
@@ -484,8 +485,8 @@ function MdItem({ item }: { item: Item }) {
   const text = item.text.replace(/^❯ /, "");
   return (
     <div className={`item ${item.kind} md`}>
-      <button className="md-toggle" title={raw ? "Show preview" : "Show raw"} onClick={() => setRaw(r => !r)}>
-        {raw ? "⬡" : "⬢"}
+      <button className="md-toggle" title={raw ? "Show rendered markdown" : "Show raw text"} onClick={() => setRaw(r => !r)}>
+        {raw ? "MD" : "Raw"}
       </button>
       {raw || failed
         ? <pre className="md-raw">{text}</pre>
@@ -505,7 +506,7 @@ class MdRenderer extends React.Component<{ text: string; onError: () => void }, 
   render() {
     if (this.state.err) return <pre className="md-raw">{this.props.text}</pre>;
     return (
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
         {this.props.text}
       </ReactMarkdown>
     );
