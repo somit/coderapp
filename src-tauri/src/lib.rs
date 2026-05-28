@@ -616,10 +616,9 @@ fn process_stats() -> Vec<ProcStat> {
         let comm = parts[4..].join(" ");
 
         let is_self = pid == my_pid;
-        let is_child = ppid == my_pid;
-        let is_agent = comm.contains("claude") || comm.contains("codex") || comm.contains("bun");
+        let is_child = ppid == my_pid; // only direct children of coderapp
 
-        if is_self || (is_child && is_agent) || (is_agent && cpu > 1.0) {
+        if is_self || is_child {
             let name = if is_self {
                 "coderapp".to_string()
             } else {
