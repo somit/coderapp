@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import rehypeRaw from "rehype-raw";
 import "highlight.js/styles/github-dark.css";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { invoke } from "@tauri-apps/api/core";
@@ -481,20 +480,36 @@ function groupItems(items: Item[]): Group[] {
 
 function MdItem({ item }: { item: Item }) {
   const [raw, setRaw] = useState(false);
+  const [failed, setFailed] = useState(false);
   const text = item.text.replace(/^❯ /, "");
   return (
     <div className={`item ${item.kind} md`}>
       <button className="md-toggle" title={raw ? "Show preview" : "Show raw"} onClick={() => setRaw(r => !r)}>
         {raw ? "⬡" : "⬢"}
       </button>
-      {raw
+      {raw || failed
         ? <pre className="md-raw">{text}</pre>
-        : <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight, rehypeRaw]}>
-            {text}
-          </ReactMarkdown>
+        : <MdRenderer text={text} onError={() => setFailed(true)} />
       }
     </div>
   );
+}
+
+class MdRenderer extends React.Component<{ text: string; onError: () => void }, { err: boolean }> {
+  constructor(props: { text: string; onError: () => void }) {
+    super(props);
+    this.state = { err: false };
+  }
+  componentDidCatch() { this.props.onError(); }
+  static getDerivedStateFromError() { return { err: true }; }
+  render() {
+    if (this.state.err) return <pre className="md-raw">{this.props.text}</pre>;
+    return (
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+        {this.props.text}
+      </ReactMarkdown>
+    );
+  }
 }
 
 function ThinkingBlock({ text }: { text: string }) {
