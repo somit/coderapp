@@ -334,7 +334,7 @@ function langFromPath(p: string): string {
   return map[ext] ?? "plaintext";
 }
 
-type ViewMode = "editor" | "diff" | "git-diff" | "preview";
+type ViewMode = "editor" | "preview" | "diff" | "git-diff";
 
 function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
   filePath: string;
@@ -423,16 +423,44 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
         </div>
         {err && <div className="code-pane-err">{err}</div>}
 
-        {!err && view === "editor" && (
-          content !== null
-            ? <Editor height="100%" theme="vs-dark" language={langFromPath(resolvedPath)}
-                value={content}
-                options={{ readOnly: false, minimap: { enabled: true }, fontSize: 12,
-                  lineNumbers: "on", scrollBeyondLastLine: false, automaticLayout: true }} />
-            : <div className="code-pane-empty">
-                <span>Click a file in the tree</span>
-                <span className="dim">or the agent will open one automatically</span>
-              </div>
+        {/* Editor + Preview side by side */}
+        {(view === "editor" || view === "preview") && (
+          <div className="editor-preview-split">
+            <div className={view === "preview" ? "editor-half" : "editor-full"}>
+              {content !== null
+                ? <Editor height="100%" theme="vs-dark" language={langFromPath(resolvedPath)}
+                    value={content}
+                    options={{ readOnly: false, minimap: { enabled: view !== "preview" }, fontSize: 12,
+                      lineNumbers: "on", scrollBeyondLastLine: false, automaticLayout: true }} />
+                : <div className="code-pane-empty">
+                    <span>Click a file in the tree</span>
+                    <span className="dim">or the agent will open it automatically</span>
+                  </div>
+              }
+            </div>
+            {view === "preview" && content !== null && (
+              <>
+                <div className="editor-divider" />
+                <div className="preview-half">
+                  {(() => {
+                    const ext = resolvedPath.split(".").pop()?.toLowerCase() ?? "";
+                    if (ext === "html" || ext === "htm") {
+                      return <iframe className="preview-frame" srcDoc={content}
+                        sandbox="allow-scripts allow-same-origin" title="HTML Preview" />;
+                    }
+                    return (
+                      <div className="preview-md">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}>
+                          {content}
+                        </ReactMarkdown>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {!err && view === "diff" && (
@@ -453,32 +481,6 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
             : <div className="code-pane-empty">
                 <span>{agentRunning ? "Waiting for changes…" : "No uncommitted changes"}</span>
               </div>
-        )}
-
-        {view === "preview" && (
-          content !== null
-            ? (() => {
-                const ext = resolvedPath.split(".").pop()?.toLowerCase() ?? "";
-                if (ext === "html" || ext === "htm") {
-                  return (
-                    <iframe
-                      className="preview-frame"
-                      srcDoc={content}
-                      sandbox="allow-scripts allow-same-origin"
-                      title="HTML Preview"
-                    />
-                  );
-                }
-                // md / mdx / txt — render as markdown
-                return (
-                  <div className="preview-md">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}>
-                      {content}
-                    </ReactMarkdown>
-                  </div>
-                );
-              })()
-            : <div className="code-pane-empty"><span>Open a file to preview</span></div>
         )}
       </div>
       <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />

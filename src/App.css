@@ -442,6 +442,25 @@ body {
   padding: 4px 4px 4px 8px;
 }
 
+/* ---- editor + preview split ---- */
+.editor-preview-split {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+.editor-full { flex: 1; overflow: hidden; }
+.editor-half { flex: 1; overflow: hidden; min-width: 0; }
+.editor-divider { width: 1px; background: #3c3c3c; flex-shrink: 0; }
+.preview-half {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+}
+
 /* ---- preview pane ---- */
 .preview-frame {
   flex: 1;
