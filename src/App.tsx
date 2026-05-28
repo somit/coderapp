@@ -1,8 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
+
+// Allow all standard HTML tags but strip unknown ones (e.g. <status>, <type> from Claude YAML)
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: defaultSchema.tagNames ?? [],
+};
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -505,7 +513,10 @@ class MdRenderer extends React.Component<{ text: string; onError: () => void }, 
   render() {
     if (this.state.err) return <pre className="md-raw">{this.props.text}</pre>;
     return (
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}
+      >
         {this.props.text}
       </ReactMarkdown>
     );
