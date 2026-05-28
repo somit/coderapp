@@ -172,8 +172,23 @@ body {
   gap: 2px;
   padding: 0 6px;
   border-right: 1px solid var(--border);
-  margin-right: 4px;
+  margin-right: 2px;
+  flex-shrink: 0;
 }
+.awake-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  border-radius: 6px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.awake-btn:hover { color: var(--text); }
+.awake-btn.on { color: #e3b341; border-color: #e3b341; background: rgba(227,179,65,0.1); }
+
 .layout-btn {
   background: transparent;
   border: 1px solid transparent;

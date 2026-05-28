@@ -474,6 +474,7 @@ function App() {
   const [newName, setNewName] = useState("");
   const [err, setErr] = useState("");
   const [usageMap, setUsageMap] = useState<Record<string, Usage[]>>(loadUsage);
+  const [awake, setAwake] = useState(false);
   const [termOpen, setTermOpen] = useState(false);
   const [termHeight, setTermHeight] = useState(220);
   const [chatWidth, setChatWidth] = useState(420);
@@ -794,22 +795,7 @@ function App() {
           <>
             {/* session tabs + layout presets */}
             <div className="session-tabs">
-              {activeWt.sessions.map(s => {
-                const sessUsage = sumUsage(usageMap[s.sessionId] ?? usageMap[s.id] ?? []);
-                const costLabel = fmt(sessUsage);
-                return (
-                  <div key={s.id} className={`stab ${s.id === activeSession.id ? "active" : ""} ${s.running ? "running" : ""}`}
-                    onClick={() => switchSession(s.id)}>
-                    <span className={`dot-sm ${s.running ? "on" : ""}`} />
-                    {s.agent}
-                    {costLabel && <span className="cost-badge">{costLabel}</span>}
-                    {activeWt.sessions.length > 1 && (
-                      <button className="tx" onClick={e => { e.stopPropagation(); removeSession(s.id); }}>×</button>
-                    )}
-                  </div>
-                );
-              })}
-              {/* layout presets */}
+              {/* layout presets — left side */}
               <div className="layout-presets">
                 {([
                   { label: "⬛▫", title: "Chat 2/3 · Code 1/3", chat: 2/3 },
@@ -827,7 +813,21 @@ function App() {
                   </button>
                 ))}
               </div>
-
+              {activeWt.sessions.map(s => {
+                const sessUsage = sumUsage(usageMap[s.sessionId] ?? usageMap[s.id] ?? []);
+                const costLabel = fmt(sessUsage);
+                return (
+                  <div key={s.id} className={`stab ${s.id === activeSession.id ? "active" : ""} ${s.running ? "running" : ""}`}
+                    onClick={() => switchSession(s.id)}>
+                    <span className={`dot-sm ${s.running ? "on" : ""}`} />
+                    {s.agent}
+                    {costLabel && <span className="cost-badge">{costLabel}</span>}
+                    {activeWt.sessions.length > 1 && (
+                      <button className="tx" onClick={e => { e.stopPropagation(); removeSession(s.id); }}>×</button>
+                    )}
+                  </div>
+                );
+              })}
               {/* add session buttons */}
               <div className="stab-add">
                 {AGENTS.map(a => (
@@ -845,6 +845,15 @@ function App() {
               </label>
               <button className="ghost" onClick={() => patchActiveSession({ sessionId: "", items: [] })}
                 disabled={activeSession.running}>new session</button>
+              <button
+                className={`awake-btn ${awake ? "on" : ""}`}
+                title={awake ? "Mac awake — click to allow sleep" : "Click to keep Mac awake"}
+                onClick={() => {
+                  if (awake) { invoke("caffeinate_off").then(() => setAwake(false)); }
+                  else { invoke("caffeinate_on").then(() => setAwake(true)).catch(() => {}); }
+                }}>
+                {awake ? "☕ awake" : "💤 sleep"}
+              </button>
             </header>
 
             <div className="meta">

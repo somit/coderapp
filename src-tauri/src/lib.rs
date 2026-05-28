@@ -26,6 +26,7 @@ struct PtySession {
 type PtyMap = Arc<Mutex<HashMap<String, PtySession>>>;
 
 struct PtyState(PtyMap);
+struct CaffeinateState(Mutex<Option<std::process::Child>>);
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
@@ -535,6 +536,25 @@ async fn send_message(
     Ok(())
 }
 
+// ---- caffeinate (prevent sleep) ----
+
+#[tauri::command]
+fn caffeinate_on(app: AppHandle) -> Result<(), String> {
+    let child = std::process::Command::new("caffeinate")
+        .args(["-d", "-i", "-m", "-s"]) // display + idle + disk + system sleep
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    *app.state::<CaffeinateState>().0.lock().unwrap() = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+fn caffeinate_off(app: AppHandle) {
+    if let Some(mut child) = app.state::<CaffeinateState>().0.lock().unwrap().take() {
+        child.kill().ok();
+    }
+}
+
 // ---- PTY commands ----
 
 #[tauri::command]
@@ -612,6 +632,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PtyState(Arc::new(Mutex::new(HashMap::new()))))
+        .manage(CaffeinateState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             send_message,
             read_file,
@@ -630,7 +651,9 @@ pub fn run() {
             pty_create,
             pty_write,
             pty_resize,
-            pty_kill
+            pty_kill,
+            caffeinate_on,
+            caffeinate_off
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
