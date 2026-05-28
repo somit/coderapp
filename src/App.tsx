@@ -66,6 +66,32 @@ function loadSlash(): Record<AgentId, string[]> {
   return { ...SEED_SLASH };
 }
 
+type Group =
+  | { type: "thinking"; items: [Item] }
+  | { type: "tools"; items: Item[] }
+  | { type: "single"; items: [Item] };
+
+function groupItems(items: Item[]): Group[] {
+  const groups: Group[] = [];
+  let toolBuf: Item[] = [];
+
+  function flushTools() {
+    if (toolBuf.length) { groups.push({ type: "tools", items: toolBuf }); toolBuf = []; }
+  }
+
+  for (const it of items) {
+    if (it.kind === "tool" || it.kind === "tool_result") {
+      toolBuf.push(it);
+    } else {
+      flushTools();
+      if (it.kind === "reasoning") groups.push({ type: "thinking", items: [it] });
+      else groups.push({ type: "single", items: [it] });
+    }
+  }
+  flushTools();
+  return groups;
+}
+
 function ThinkingBlock({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   const preview = text.slice(0, 80).replace(/\n/g, " ") + (text.length > 80 ? "…" : "");
@@ -77,6 +103,30 @@ function ThinkingBlock({ text }: { text: string }) {
         {!open && <span className="think-preview">{preview}</span>}
       </div>
       {open && <pre className="think-body">{text}</pre>}
+    </div>
+  );
+}
+
+function ToolLoop({ items }: { items: Item[] }) {
+  const [open, setOpen] = useState(false);
+  // build a short summary from tool names
+  const tools = items.filter(i => i.kind === "tool").map(i => i.text.replace(/^▶\s*/, "").split(/\s+/)[0]);
+  const unique = [...new Set(tools)];
+  const summary = unique.slice(0, 4).join(", ") + (unique.length > 4 ? ` +${unique.length - 4}` : "");
+  return (
+    <div className="item tool-loop">
+      <div className="think-header" onClick={() => setOpen(o => !o)}>
+        <span className="think-arrow">{open ? "▾" : "▶"}</span>
+        <span className="think-label">{items.filter(i => i.kind === "tool").length} tool calls</span>
+        {!open && <span className="think-preview">{summary}</span>}
+      </div>
+      {open && (
+        <div className="tool-loop-body">
+          {items.map((it, i) => (
+            <div key={i} className={`item-inner ${it.kind}`}><pre>{it.text}</pre></div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -407,11 +457,11 @@ function App() {
                   <b>{activeSession.agent}</b> on <b>{activeWt.branch}</b>. Type a prompt or <b>/</b> for commands.
                 </div>
               )}
-              {activeSession.items.map((it, i) =>
-                it.kind === "reasoning"
-                  ? <ThinkingBlock key={i} text={it.text} />
-                  : <div key={i} className={`item ${it.kind}`}><pre>{it.text}</pre></div>
-              )}
+              {groupItems(activeSession.items).map((g, i) => {
+                if (g.type === "thinking") return <ThinkingBlock key={i} text={g.items[0].text} />;
+                if (g.type === "tools") return <ToolLoop key={i} items={g.items} />;
+                return <div key={i} className={`item ${g.items[0].kind}`}><pre>{g.items[0].text}</pre></div>;
+              })}
               {activeSession.running && <div className="item running"><pre>… running</pre></div>}
               <div ref={endRef} />
             </main>
