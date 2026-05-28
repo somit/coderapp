@@ -6,6 +6,7 @@
 // the zombie-process problem. Session continuity comes from each CLI's own
 // on-disk session store, addressed by a session/thread id.
 
+use std::cmp::Reverse;
 use std::io::{BufRead, BufReader as StdBufReader};
 use std::path::Path;
 use std::process::Stdio;
@@ -53,7 +54,6 @@ fn load_session_history(session_id: String, cwd: String) -> Vec<String> {
 }
 
 /// Find the most recent Claude session id for a given working directory.
-/// Returns empty string if none found.
 #[tauri::command]
 fn latest_session_id(cwd: String) -> String {
     let dir = claude_project_dir(&cwd);
@@ -75,6 +75,79 @@ fn latest_session_id(cwd: String) -> String {
         }
     }
     best.map(|(_, id)| id).unwrap_or_default()
+}
+
+/// Load a Codex session transcript by thread_id.
+/// Codex stores sessions at ~/.codex/sessions/<year>/<month>/<day>/rollout-*-<id>.jsonl
+#[tauri::command]
+fn load_codex_session(thread_id: String) -> Vec<String> {
+    let base = format!("{}/.codex/sessions", home());
+    let mut result: Vec<String> = vec![];
+    // walk year/month/day dirs to find the file containing thread_id
+    let walk = walkdir_codex(&base, &thread_id);
+    if let Some(path) = walk {
+        if let Ok(f) = std::fs::File::open(&path) {
+            result = StdBufReader::new(f).lines().filter_map(|l| l.ok()).collect();
+        }
+    }
+    result
+}
+
+fn walkdir_codex(base: &str, thread_id: &str) -> Option<String> {
+    // sessions are in base/YYYY/MM/DD/rollout-*-<thread_id>.jsonl
+    // search newest-first: reverse-sort dirs
+    let mut years: Vec<_> = std::fs::read_dir(base).ok()?.filter_map(|e| e.ok()).collect();
+    years.sort_by_key(|e| std::cmp::Reverse(e.file_name()));
+    for year in years {
+        let mut months: Vec<_> = std::fs::read_dir(year.path()).ok()?.filter_map(|e| e.ok()).collect();
+        months.sort_by_key(|e| std::cmp::Reverse(e.file_name()));
+        for month in months {
+            let mut days: Vec<_> = std::fs::read_dir(month.path()).ok()?.filter_map(|e| e.ok()).collect();
+            days.sort_by_key(|e| std::cmp::Reverse(e.file_name()));
+            for day in days {
+                let mut files: Vec<_> = std::fs::read_dir(day.path()).ok()?.filter_map(|e| e.ok()).collect();
+                files.sort_by_key(|e| std::cmp::Reverse(e.file_name()));
+                for file in files {
+                    let name = file.file_name().to_string_lossy().to_string();
+                    if name.ends_with(&format!("-{}.jsonl", thread_id)) {
+                        return Some(file.path().to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Find the most recent Codex thread_id for a given cwd.
+#[tauri::command]
+fn latest_codex_session(cwd: String) -> String {
+    // session_index.jsonl doesn't have cwd, but session files have turn_context with cwd.
+    // Faster: scan session_meta lines newest-first from session_index order.
+    let index_path = format!("{}/.codex/session_index.jsonl", home());
+    let base = format!("{}/.codex/sessions", home());
+    let index_content = std::fs::read_to_string(&index_path).unwrap_or_default();
+    // read ids newest-first (file is append-only, so reverse)
+    let ids: Vec<String> = index_content.lines().rev()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter_map(|v| v["id"].as_str().map(String::from))
+        .collect();
+    for id in &ids {
+        if let Some(path) = walkdir_codex(&base, id) {
+            if let Ok(f) = std::fs::File::open(&path) {
+                for line in StdBufReader::new(f).lines().filter_map(|l| l.ok()) {
+                    if let Ok(ev) = serde_json::from_str::<serde_json::Value>(&line) {
+                        if ev["type"] == "turn_context" {
+                            if let Some(c) = ev["payload"]["cwd"].as_str() {
+                                if c == cwd { return id.clone(); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    String::new()
 }
 
 // ---- fetch slash commands from claude init event ----
@@ -376,6 +449,8 @@ pub fn run() {
             send_message,
             load_session_history,
             latest_session_id,
+            load_codex_session,
+            latest_codex_session,
             fetch_slash_commands,
             list_worktrees,
             create_worktree,

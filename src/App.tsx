@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { AGENTS, AgentId, Item, parseLine, parseTranscriptLine, SEED_SLASH } from "./agents";
+import { AGENTS, AgentId, Item, parseLine, parseTranscriptLine, parseCodexTranscriptLine, SEED_SLASH } from "./agents";
 import "./App.css";
 
 interface StreamLine { run_id: string; stream: "stdout" | "stderr"; line: string; }
@@ -215,25 +215,31 @@ function App() {
     if (!activeSession || !activeWt) return;
     if (activeSession.items.length > 0) return;
 
+    const agent = activeSession.agent;
+
     async function loadHistory(sessId: string) {
-      const lines = await invoke<string[]>("load_session_history", { sessionId: sessId, cwd: activeWt!.path });
-      console.log(`[history] sessId=${sessId} cwd=${activeWt!.path} lines=${lines.length}`);
-      const items: Item[] = [];
-      for (const line of lines) {
-        const parsed = parseTranscriptLine(line);
-        items.push(...parsed.items);
+      let lines: string[];
+      let parseF: (l: string) => { items: Item[] };
+      if (agent === "codex") {
+        lines = await invoke<string[]>("load_codex_session", { threadId: sessId });
+        parseF = parseCodexTranscriptLine;
+      } else {
+        lines = await invoke<string[]>("load_session_history", { sessionId: sessId, cwd: activeWt!.path });
+        parseF = parseTranscriptLine;
       }
-      console.log(`[history] parsed items=${items.length}`);
+      const items: Item[] = [];
+      for (const line of lines) items.push(...parseF(line).items);
       if (items.length) patchSession(activeSession!.id, () => ({ items, sessionId: sessId }));
     }
 
     if (activeSession.sessionId) {
-      console.log(`[history] known sessId=${activeSession.sessionId}`);
-      loadHistory(activeSession.sessionId).catch(e => console.error("[history] error", e));
+      loadHistory(activeSession.sessionId).catch(() => {});
     } else {
-      invoke<string>("latest_session_id", { cwd: activeWt.path })
-        .then(id => { console.log(`[history] discovered id=${id}`); if (id) loadHistory(id); })
-        .catch(e => console.error("[history] discover error", e));
+      const cmd = agent === "codex" ? "latest_codex_session" : "latest_session_id";
+      const arg = agent === "codex" ? { cwd: activeWt.path } : { cwd: activeWt.path };
+      invoke<string>(cmd, arg)
+        .then(id => { if (id) loadHistory(id); })
+        .catch(() => {});
     }
   }, [activeSession?.id]);
 

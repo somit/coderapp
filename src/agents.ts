@@ -152,6 +152,38 @@ export function parseLine(agent: AgentId, stream: "stdout" | "stderr", line: str
   }
 }
 
+// ---- Codex transcript parser (~/.codex/sessions/…/rollout-*.jsonl) ----
+
+export function parseCodexTranscriptLine(line: string): Parsed {
+  let ev: any;
+  try { ev = JSON.parse(line); } catch { return { items: [] }; }
+  const items: Item[] = [];
+  const p = ev.payload ?? {};
+
+  if (ev.type === "event_msg") {
+    if (p.type === "user_message" && typeof p.message === "string") {
+      // strip IDE context header if present (everything before "## My request for Codex:")
+      const marker = "## My request for Codex:\n";
+      const idx = p.message.indexOf(marker);
+      const text = idx >= 0 ? p.message.slice(idx + marker.length).trim() : p.message.trim();
+      if (text) items.push({ kind: "text", text: `❯ ${text}` });
+    } else if (p.type === "agent_message" && typeof p.message === "string" && p.message.trim()) {
+      items.push({ kind: "assistant", text: p.message.trim() });
+    } else if (p.type === "agent_reasoning" && typeof p.text === "string" && p.text.trim()) {
+      items.push({ kind: "reasoning", text: p.text.trim() });
+    }
+  } else if (ev.type === "response_item") {
+    if (p.type === "function_call" && p.name) {
+      let args = "";
+      try { const a = JSON.parse(p.arguments ?? "{}"); args = a.command ?? a.path ?? ""; } catch {}
+      items.push({ kind: "tool", text: `▶ ${p.name}  ${clip(args)}` });
+    } else if (p.type === "function_call_output" && p.output) {
+      items.push({ kind: "tool_result", text: clip(p.output) });
+    }
+  }
+  return { items };
+}
+
 // ---- Transcript file parser (internal .jsonl format, different from stream-json) ----
 // Used when replaying history from ~/.claude/projects/<dir>/<id>.jsonl
 
