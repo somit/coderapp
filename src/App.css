@@ -79,16 +79,44 @@ body {
 .side-presets-row { flex: 1; }
 
 /* sys bar */
+.sys-bar-wrap { width: 100%; }
 .sys-bar {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   padding: 2px 0;
+  cursor: pointer;
+  user-select: none;
 }
+.sys-bar:hover .sys-label { color: #666; }
 .sys-item { display: flex; align-items: center; gap: 4px; font-size: 11px; }
-.sys-label { color: #444; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; }
+.sys-label { color: #444; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; transition: color 0.1s; }
 .sys-val { color: var(--dim); font-variant-numeric: tabular-nums; min-width: 32px; }
 .sys-val.warm { color: var(--tool); }
 .sys-val.hot  { color: var(--err); }
+.sys-arrow { color: #333; font-size: 9px; margin-left: auto; }
+
+/* process list */
+.proc-list {
+  border-top: 1px solid #1c2128;
+  padding: 4px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.proc-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 1px 0;
+}
+.proc-row.dim { color: #333; }
+.proc-name { flex: 1; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proc-cpu { min-width: 36px; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+.proc-cpu.warm { color: var(--tool); }
+.proc-cpu.hot  { color: var(--err); }
+.proc-mem { min-width: 36px; text-align: right; color: #444; font-variant-numeric: tabular-nums; }
 .side-err {
   padding: 8px 12px; font-size: 11px; color: var(--err);
   border-top: 1px solid var(--border); cursor: pointer;

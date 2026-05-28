@@ -586,6 +586,52 @@ fn get_mem_stats() -> (f32, f32) {
     (used_bytes as f32 / 1e9, total as f32 / 1e9)
 }
 
+/// Per-process memory/CPU snapshot for coderapp + its agent children.
+#[derive(Serialize, Clone)]
+struct ProcStat {
+    name: String,
+    pid: u32,
+    cpu: f32,
+    mem_mb: f32,
+}
+
+#[tauri::command]
+fn process_stats() -> Vec<ProcStat> {
+    // Use `ps` to get stats for this process and any claude/codex/bun children
+    let my_pid = std::process::id();
+    let out = std::process::Command::new("ps")
+        .args(["-eo", "pid,ppid,%cpu,rss,comm"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
+
+    let mut results = vec![];
+    for line in out.lines().skip(1) {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 5 { continue; }
+        let pid: u32 = parts[0].parse().unwrap_or(0);
+        let ppid: u32 = parts[1].parse().unwrap_or(0);
+        let cpu: f32 = parts[2].parse().unwrap_or(0.0);
+        let rss_kb: f32 = parts[3].parse().unwrap_or(0.0);
+        let comm = parts[4..].join(" ");
+
+        let is_self = pid == my_pid;
+        let is_child = ppid == my_pid;
+        let is_agent = comm.contains("claude") || comm.contains("codex") || comm.contains("bun");
+
+        if is_self || (is_child && is_agent) || (is_agent && cpu > 1.0) {
+            let name = if is_self {
+                "coderapp".to_string()
+            } else {
+                comm.split('/').last().unwrap_or(&comm).chars().take(20).collect()
+            };
+            results.push(ProcStat { name, pid, cpu, mem_mb: rss_kb / 1024.0 });
+        }
+    }
+    results.sort_by(|a, b| b.mem_mb.partial_cmp(&a.mem_mb).unwrap_or(std::cmp::Ordering::Equal));
+    results
+}
+
 fn get_cpu_percent() -> f32 {
     // Sample ps load average as a proxy (cheap, no sysctl loop needed)
     let out = std::process::Command::new("sh")
@@ -719,7 +765,8 @@ pub fn run() {
             pty_kill,
             caffeinate_on,
             caffeinate_off,
-            system_stats
+            system_stats,
+            process_stats
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

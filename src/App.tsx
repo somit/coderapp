@@ -94,28 +94,54 @@ function loadSlash(): Record<AgentId, string[]> {
 }
 
 interface SysStats { cpu: number; mem_used_gb: number; mem_total_gb: number; }
+interface ProcStat { name: string; pid: number; cpu: number; mem_mb: number; }
 
 function SysBar() {
   const [stats, setStats] = useState<SysStats | null>(null);
+  const [procs, setProcs] = useState<ProcStat[]>([]);
+  const [expanded, setExpanded] = useState(false);
+
   useEffect(() => {
-    const poll = () => invoke<SysStats>("system_stats").then(setStats).catch(() => {});
+    const poll = () => {
+      invoke<SysStats>("system_stats").then(setStats).catch(() => {});
+      invoke<ProcStat[]>("process_stats").then(setProcs).catch(() => {});
+    };
     poll();
     const t = setInterval(poll, 3000);
     return () => clearInterval(t);
   }, []);
+
   if (!stats) return null;
   const memPct = Math.round((stats.mem_used_gb / stats.mem_total_gb) * 100);
   const cpuPct = Math.round(stats.cpu);
+
   return (
-    <div className="sys-bar">
-      <span className="sys-item" title={`CPU ${cpuPct}%`}>
-        <span className="sys-label">CPU</span>
-        <span className={`sys-val ${cpuPct > 80 ? "hot" : cpuPct > 50 ? "warm" : ""}`}>{cpuPct}%</span>
-      </span>
-      <span className="sys-item" title={`${stats.mem_used_gb.toFixed(1)} / ${stats.mem_total_gb.toFixed(0)} GB`}>
-        <span className="sys-label">MEM</span>
-        <span className={`sys-val ${memPct > 85 ? "hot" : memPct > 65 ? "warm" : ""}`}>{stats.mem_used_gb.toFixed(1)}G</span>
-      </span>
+    <div className="sys-bar-wrap">
+      <div className="sys-bar" onClick={() => setExpanded(e => !e)} title="Click to see process detail">
+        <span className="sys-item">
+          <span className="sys-label">CPU</span>
+          <span className={`sys-val ${cpuPct > 80 ? "hot" : cpuPct > 50 ? "warm" : ""}`}>{cpuPct}%</span>
+        </span>
+        <span className="sys-item">
+          <span className="sys-label">MEM</span>
+          <span className={`sys-val ${memPct > 85 ? "hot" : memPct > 65 ? "warm" : ""}`}>{stats.mem_used_gb.toFixed(1)}G</span>
+        </span>
+        <span className="sys-arrow">{expanded ? "▴" : "▾"}</span>
+      </div>
+      {expanded && (
+        <div className="proc-list">
+          {procs.length === 0
+            ? <div className="proc-row dim">no agents running</div>
+            : procs.map(p => (
+              <div key={p.pid} className="proc-row">
+                <span className="proc-name">{p.name}</span>
+                <span className={`proc-cpu ${p.cpu > 50 ? "hot" : p.cpu > 20 ? "warm" : ""}`}>{p.cpu.toFixed(1)}%</span>
+                <span className="proc-mem">{p.mem_mb.toFixed(0)}M</span>
+              </div>
+            ))
+          }
+        </div>
+      )}
     </div>
   );
 }
