@@ -453,6 +453,24 @@ function groupItems(items: Item[]): Group[] {
   return groups;
 }
 
+function MdItem({ item }: { item: Item }) {
+  const [raw, setRaw] = useState(false);
+  const text = item.text.replace(/^❯ /, "");
+  return (
+    <div className={`item ${item.kind} md`}>
+      <button className="md-toggle" title={raw ? "Show preview" : "Show raw"} onClick={() => setRaw(r => !r)}>
+        {raw ? "⬡" : "⬢"}
+      </button>
+      {raw
+        ? <pre className="md-raw">{text}</pre>
+        : <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight, rehypeRaw]}>
+            {text}
+          </ReactMarkdown>
+      }
+    </div>
+  );
+}
+
 function ThinkingBlock({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   const preview = text.slice(0, 80).replace(/\n/g, " ") + (text.length > 80 ? "…" : "");
@@ -909,16 +927,7 @@ function App() {
                 if (g.type === "tools") return <ToolLoop key={i} items={g.items} />;
                 const it = g.items[0];
                 if (it.kind === "assistant" || it.kind === "text") {
-                  return (
-                    <div key={i} className={`item ${it.kind} md`}>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight, rehypeRaw]}
-                      >
-                        {it.text.replace(/^❯ /, "")}
-                      </ReactMarkdown>
-                    </div>
-                  );
+                  return <MdItem key={i} item={it} />;
                 }
                 return <div key={i} className={`item ${it.kind}`}><pre>{it.text}</pre></div>;
               })}
