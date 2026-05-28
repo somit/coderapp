@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import Editor from "@monaco-editor/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -14,9 +15,10 @@ interface Session {
   id: string;
   agent: AgentId;
   yolo: boolean;
-  sessionId: string; // claude/codex resume id
+  sessionId: string;
   items: Item[];
   running: boolean;
+  activeFile?: string; // last file the agent touched
 }
 
 // One git worktree (or the main checkout)
@@ -83,6 +85,62 @@ function loadProjects(): Project[] {
 function loadSlash(): Record<AgentId, string[]> {
   try { const r = localStorage.getItem(SLASH_KEY); if (r) return { ...SEED_SLASH, ...JSON.parse(r) }; } catch {}
   return { ...SEED_SLASH };
+}
+
+function langFromPath(p: string): string {
+  const ext = p.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    ts:"typescript", tsx:"typescript", js:"javascript", jsx:"javascript",
+    py:"python", rs:"rust", go:"go", rb:"ruby", java:"java", kt:"kotlin",
+    swift:"swift", cpp:"cpp", c:"c", cs:"csharp", sh:"shell", bash:"shell",
+    zsh:"shell", json:"json", yaml:"yaml", yml:"yaml", toml:"toml",
+    md:"markdown", html:"html", css:"css", scss:"scss", sql:"sql",
+    graphql:"graphql", proto:"protobuf", tf:"hcl",
+  };
+  return map[ext] ?? "plaintext";
+}
+
+function CodePane({ filePath, repoPath }: { filePath: string; repoPath: string }) {
+  const [content, setContent] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    if (!filePath) return;
+    invoke<string>("read_file", { path: filePath })
+      .then(c => { setContent(c); setErr(""); })
+      .catch(() => {
+        // try relative to repoPath
+        invoke<string>("read_file", { path: `${repoPath}/${filePath}` })
+          .then(c => { setContent(c); setErr(""); })
+          .catch(e => setErr(String(e)));
+      });
+  }, [filePath]);
+
+  if (err) return <div className="code-pane err"><span>{err}</span></div>;
+  if (content === null) return <div className="code-pane loading"><span>loading…</span></div>;
+
+  return (
+    <div className="code-pane">
+      <div className="code-pane-header">
+        <span className="code-pane-path">{filePath}</span>
+      </div>
+      <Editor
+        height="100%"
+        theme="vs-dark"
+        language={langFromPath(filePath)}
+        value={content}
+        options={{
+          readOnly: false,
+          minimap: { enabled: true },
+          fontSize: 12,
+          lineNumbers: "on",
+          scrollBeyondLastLine: false,
+          wordWrap: "off",
+          automaticLayout: true,
+        }}
+      />
+    </div>
+  );
 }
 
 type Group =
@@ -207,14 +265,16 @@ function App() {
       const parsed = parseLine(agent, stream, line);
       if (parsed.slashCommands) setSlashByAgent(prev => ({ ...prev, [agent]: parsed.slashCommands! }));
       if (parsed.usage) {
-        // key by the session's claude/codex sessionId if known, else by our internal session id
         const key = parsed.sessionId ?? sessId;
         setUsageMap(prev => ({ ...prev, [key]: [...(prev[key] ?? []), parsed.usage!] }));
       }
-      if (parsed.sessionId || parsed.items.length) {
+      // track most recently touched file for the editor pane
+      const filePath = parsed.items.find(i => i.filePath)?.filePath;
+      if (parsed.sessionId || parsed.items.length || filePath) {
         patchSession(sessId, s => ({
           sessionId: parsed.sessionId ?? s.sessionId,
           items: parsed.items.length ? [...s.items, ...parsed.items] : s.items,
+          ...(filePath ? { activeFile: filePath } : {}),
         }));
       }
     });
@@ -468,7 +528,7 @@ function App() {
         {err && <div className="side-err" onClick={() => setErr("")}>{err}</div>}
       </aside>
 
-      {/* ---- main pane ---- */}
+      {/* ---- main pane (chat + editor split) ---- */}
       <div className="pane">
         {!activeWt || !activeSession ? (
           <div className="empty">Add a project from the sidebar to start.</div>
@@ -518,6 +578,8 @@ function App() {
               {resumeNote && <span className="note">{resumeNote}</span>}
             </div>
 
+            <div className="split">
+            <div className="split-chat">
             <main className="transcript">
               {activeSession.items.length === 0 && (
                 <div className="empty">
@@ -583,6 +645,11 @@ function App() {
                 </div>
               </div>
             </footer>
+            </div>{/* split-chat */}
+            {activeSession.activeFile && (
+              <CodePane filePath={activeSession.activeFile} repoPath={activeWt.path} />
+            )}
+            </div>{/* split */}
           </>
         )}
       </div>

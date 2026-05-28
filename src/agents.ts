@@ -26,6 +26,7 @@ export type ItemKind =
 export interface Item {
   kind: ItemKind;
   text: string;
+  filePath?: string; // set on tool items that touch a file
 }
 
 export interface Usage {
@@ -51,6 +52,15 @@ export const SEED_SLASH: Record<AgentId, string[]> = {
 
 function clip(s: string, n = 800): string {
   return s.length > n ? s.slice(0, n) + " …" : s;
+}
+
+function extractFilePath(input: unknown): string | undefined {
+  if (input && typeof input === "object") {
+    const o = input as Record<string, unknown>;
+    const p = o.file_path ?? o.path ?? o.notebook_path;
+    if (typeof p === "string") return p;
+  }
+  return undefined;
 }
 
 function summarizeInput(input: unknown): string {
@@ -85,8 +95,10 @@ function parseClaude(line: string): Parsed {
       if (b.type === "text" && b.text?.trim()) items.push({ kind: "assistant", text: b.text });
       else if (b.type === "thinking" && b.thinking?.trim())
         items.push({ kind: "reasoning", text: b.thinking });
-      else if (b.type === "tool_use")
-        items.push({ kind: "tool", text: `▶ ${b.name}  ${summarizeInput(b.input)}` });
+      else if (b.type === "tool_use") {
+        const fp = extractFilePath(b.input);
+        items.push({ kind: "tool", text: `▶ ${b.name}  ${summarizeInput(b.input)}`, filePath: fp });
+      }
     }
   } else if (ev.type === "user") {
     for (const b of ev.message?.content ?? []) {
@@ -232,7 +244,10 @@ export function parseTranscriptLine(line: string): Parsed {
     for (const b of ev.message.content) {
       if (b.type === "text" && b.text?.trim()) items.push({ kind: "assistant", text: b.text });
       else if (b.type === "thinking" && b.thinking?.trim()) items.push({ kind: "reasoning", text: b.thinking });
-      else if (b.type === "tool_use") items.push({ kind: "tool", text: `▶ ${b.name}  ${summarizeInput(b.input)}` });
+      else if (b.type === "tool_use") {
+        const fp = extractFilePath(b.input);
+        items.push({ kind: "tool", text: `▶ ${b.name}  ${summarizeInput(b.input)}`, filePath: fp });
+      }
     }
   }
   return { items };

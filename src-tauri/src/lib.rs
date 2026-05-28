@@ -150,6 +150,13 @@ fn latest_codex_session(cwd: String) -> String {
     String::new()
 }
 
+// ---- file read for editor ----
+
+#[tauri::command]
+fn read_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
 // ---- fetch slash commands from claude init event ----
 
 /// Spawn `claude --output-format stream-json -p ""` in a throwaway way,
@@ -447,6 +454,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             send_message,
+            read_file,
             load_session_history,
             latest_session_id,
             load_codex_session,
