@@ -536,6 +536,72 @@ async fn send_message(
     Ok(())
 }
 
+// ---- system stats ----
+
+#[derive(Serialize, Clone)]
+struct SysStats {
+    cpu: f32,    // overall CPU %
+    mem_used_gb: f32,
+    mem_total_gb: f32,
+}
+
+#[tauri::command]
+fn system_stats() -> SysStats {
+    // macOS: use vm_stat + sysctl for memory, and top snapshot for CPU
+    let mem = get_mem_stats();
+    let cpu = get_cpu_percent();
+    SysStats { cpu, mem_used_gb: mem.0, mem_total_gb: mem.1 }
+}
+
+fn get_mem_stats() -> (f32, f32) {
+    // total: sysctl hw.memsize
+    let total = std::process::Command::new("sysctl")
+        .args(["-n", "hw.memsize"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u64>().ok())
+        .unwrap_or(0);
+    // used: vm_stat gives page counts; page size is 16384 on Apple Silicon
+    let vm = std::process::Command::new("vm_stat")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
+    let page_size: u64 = std::process::Command::new("sysctl")
+        .args(["-n", "hw.pagesize"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())
+        .unwrap_or(16384);
+    let parse_pages = |key: &str| -> u64 {
+        vm.lines().find(|l| l.contains(key))
+            .and_then(|l| l.split_whitespace().last())
+            .and_then(|v| v.trim_end_matches('.').parse::<u64>().ok())
+            .unwrap_or(0)
+    };
+    let wired = parse_pages("Pages wired down");
+    let active = parse_pages("Pages active");
+    let compressed = parse_pages("Pages occupied by compressor");
+    let used_bytes = (wired + active + compressed) * page_size;
+    (used_bytes as f32 / 1e9, total as f32 / 1e9)
+}
+
+fn get_cpu_percent() -> f32 {
+    // Sample ps load average as a proxy (cheap, no sysctl loop needed)
+    let out = std::process::Command::new("sh")
+        .args(["-c", "ps -A -o %cpu | awk '{s+=$1} END {print s}'"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<f32>().unwrap_or(0.0))
+        .unwrap_or(0.0);
+    // Normalize by logical CPU count
+    let ncpu = std::process::Command::new("sysctl")
+        .args(["-n", "hw.logicalcpu"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<f32>().ok())
+        .unwrap_or(8.0);
+    (out / ncpu).min(100.0)
+}
+
 // ---- caffeinate (prevent sleep) ----
 
 #[tauri::command]
@@ -653,7 +719,8 @@ pub fn run() {
             pty_resize,
             pty_kill,
             caffeinate_on,
-            caffeinate_off
+            caffeinate_off,
+            system_stats
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

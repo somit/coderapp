@@ -1,4 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import rehypeRaw from "rehype-raw";
+import "highlight.js/styles/github-dark.css";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -86,6 +91,33 @@ function loadProjects(): Project[] {
 function loadSlash(): Record<AgentId, string[]> {
   try { const r = localStorage.getItem(SLASH_KEY); if (r) return { ...SEED_SLASH, ...JSON.parse(r) }; } catch {}
   return { ...SEED_SLASH };
+}
+
+interface SysStats { cpu: number; mem_used_gb: number; mem_total_gb: number; }
+
+function SysBar() {
+  const [stats, setStats] = useState<SysStats | null>(null);
+  useEffect(() => {
+    const poll = () => invoke<SysStats>("system_stats").then(setStats).catch(() => {});
+    poll();
+    const t = setInterval(poll, 3000);
+    return () => clearInterval(t);
+  }, []);
+  if (!stats) return null;
+  const memPct = Math.round((stats.mem_used_gb / stats.mem_total_gb) * 100);
+  const cpuPct = Math.round(stats.cpu);
+  return (
+    <div className="sys-bar">
+      <span className="sys-item" title={`CPU ${cpuPct}%`}>
+        <span className="sys-label">CPU</span>
+        <span className={`sys-val ${cpuPct > 80 ? "hot" : cpuPct > 50 ? "warm" : ""}`}>{cpuPct}%</span>
+      </span>
+      <span className="sys-item" title={`${stats.mem_used_gb.toFixed(1)} / ${stats.mem_total_gb.toFixed(0)} GB`}>
+        <span className="sys-label">MEM</span>
+        <span className={`sys-val ${memPct > 85 ? "hot" : memPct > 65 ? "warm" : ""}`}>{stats.mem_used_gb.toFixed(1)}G</span>
+      </span>
+    </div>
+  );
 }
 
 function TermPanel({ cwd, open, height, onToggle, onResize, children }: {
@@ -785,29 +817,32 @@ function App() {
         </div>
         {err && <div className="side-err" onClick={() => setErr("")}>{err}</div>}
         <div className="side-footer">
-          <div className="layout-presets side-presets">
-            {([
-              { label: "⬛▫", title: "Chat 2/3 · Code 1/3", chat: 2/3 },
-              { label: "▪▪",  title: "50 / 50",              chat: 1/2 },
-              { label: "▫⬛", title: "Chat 1/3 · Code 2/3", chat: 1/3 },
-              { label: "⬛",  title: "Chat only",             chat: 1   },
-              { label: "▫",  title: "Code only",              chat: 0   },
-            ] as const).map(p => (
-              <button key={p.label} className="layout-btn" title={p.title}
-                onClick={() => setChatWidth(Math.round((paneRef.current?.offsetWidth ?? 800) * p.chat))}>
-                {p.label}
-              </button>
-            ))}
+          <SysBar />
+          <div className="side-footer-row">
+            <div className="layout-presets side-presets">
+              {([
+                { label: "⬛▫", title: "Chat 2/3 · Code 1/3", chat: 2/3 },
+                { label: "▪▪",  title: "50 / 50",              chat: 1/2 },
+                { label: "▫⬛", title: "Chat 1/3 · Code 2/3", chat: 1/3 },
+                { label: "⬛",  title: "Chat only",             chat: 1   },
+                { label: "▫",  title: "Code only",              chat: 0   },
+              ] as const).map(p => (
+                <button key={p.label} className="layout-btn" title={p.title}
+                  onClick={() => setChatWidth(Math.round((paneRef.current?.offsetWidth ?? 800) * p.chat))}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <button
+              className={`awake-btn ${awake ? "on" : ""}`}
+              title={awake ? "Mac awake — click to allow sleep" : "Click to keep Mac awake"}
+              onClick={() => {
+                if (awake) { invoke("caffeinate_off").then(() => setAwake(false)); }
+                else { invoke("caffeinate_on").then(() => setAwake(true)).catch(() => {}); }
+              }}>
+              {awake ? "☕" : "💤"}
+            </button>
           </div>
-          <button
-            className={`awake-btn ${awake ? "on" : ""}`}
-            title={awake ? "Mac awake — click to allow sleep" : "Click to keep Mac awake"}
-            onClick={() => {
-              if (awake) { invoke("caffeinate_off").then(() => setAwake(false)); }
-              else { invoke("caffeinate_on").then(() => setAwake(true)).catch(() => {}); }
-            }}>
-            {awake ? "☕" : "💤"}
-          </button>
         </div>
       </aside>
 
@@ -872,7 +907,20 @@ function App() {
               {groupItems(activeSession.items).map((g, i) => {
                 if (g.type === "thinking") return <ThinkingBlock key={i} text={g.items[0].text} />;
                 if (g.type === "tools") return <ToolLoop key={i} items={g.items} />;
-                return <div key={i} className={`item ${g.items[0].kind}`}><pre>{g.items[0].text}</pre></div>;
+                const it = g.items[0];
+                if (it.kind === "assistant" || it.kind === "text") {
+                  return (
+                    <div key={i} className={`item ${it.kind} md`}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight, rehypeRaw]}
+                      >
+                        {it.text.replace(/^❯ /, "")}
+                      </ReactMarkdown>
+                    </div>
+                  );
+                }
+                return <div key={i} className={`item ${it.kind}`}><pre>{it.text}</pre></div>;
               })}
               {activeSession.running && <div className="item running"><pre>… running</pre></div>}
               <div ref={endRef} />
