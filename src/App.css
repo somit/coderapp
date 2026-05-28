@@ -203,6 +203,7 @@ body {
 .code-pane-header {
   display: flex;
   align-items: center;
+  gap: 8px;
   padding: 5px 12px;
   background: #252526;
   border-bottom: 1px solid #3c3c3c;
@@ -211,11 +212,48 @@ body {
   flex-shrink: 0;
 }
 .code-pane-path {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl; /* shows filename end, not start */
+  direction: rtl;
 }
+.code-pane-path.dim { color: #555; }
+.code-open-btn {
+  background: transparent;
+  border: 1px solid #3c3c3c;
+  color: #888;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.code-open-btn:hover { color: #ccc; border-color: #666; }
+.code-pane-err {
+  padding: 12px; color: var(--err); font-size: 12px;
+}
+.code-pane-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #555;
+  font-size: 13px;
+}
+.code-pane-empty button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 16px;
+  cursor: pointer;
+  font: inherit;
+}
+.code-pane-empty .dim { font-size: 11px; color: #444; }
 
 /* ---- token / cost badges ---- */
 .cost-badge {

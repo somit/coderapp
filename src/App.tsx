@@ -145,45 +145,65 @@ function langFromPath(p: string): string {
   return map[ext] ?? "plaintext";
 }
 
-function CodePane({ filePath, repoPath }: { filePath: string; repoPath: string }) {
+function CodePane({ filePath, repoPath, onOpenFile }: {
+  filePath: string;
+  repoPath: string;
+  onOpenFile: (fp: string) => void;
+}) {
   const [content, setContent] = useState<string | null>(null);
   const [err, setErr] = useState("");
+  const [resolvedPath, setResolvedPath] = useState("");
 
   useEffect(() => {
-    if (!filePath) return;
+    if (!filePath) { setContent(null); setErr(""); setResolvedPath(""); return; }
+    // try absolute, then relative to repoPath
     invoke<string>("read_file", { path: filePath })
-      .then(c => { setContent(c); setErr(""); })
+      .then(c => { setContent(c); setErr(""); setResolvedPath(filePath); })
       .catch(() => {
-        // try relative to repoPath
-        invoke<string>("read_file", { path: `${repoPath}/${filePath}` })
-          .then(c => { setContent(c); setErr(""); })
-          .catch(e => setErr(String(e)));
+        const rel = `${repoPath}/${filePath}`;
+        invoke<string>("read_file", { path: rel })
+          .then(c => { setContent(c); setErr(""); setResolvedPath(rel); })
+          .catch(e => { setErr(String(e)); setContent(null); });
       });
   }, [filePath]);
 
-  if (err) return <div className="code-pane err"><span>{err}</span></div>;
-  if (content === null) return <div className="code-pane loading"><span>loading…</span></div>;
+  async function pickFile() {
+    const picked = await open({ title: "Open file" });
+    if (picked && typeof picked === "string") onOpenFile(picked);
+  }
 
   return (
     <div className="code-pane">
       <div className="code-pane-header">
-        <span className="code-pane-path">{filePath}</span>
+        {resolvedPath
+          ? <span className="code-pane-path">{resolvedPath}</span>
+          : <span className="code-pane-path dim">no file open</span>
+        }
+        <button className="code-open-btn" onClick={pickFile} title="Open file">open…</button>
       </div>
-      <Editor
-        height="100%"
-        theme="vs-dark"
-        language={langFromPath(filePath)}
-        value={content}
-        options={{
-          readOnly: false,
-          minimap: { enabled: true },
-          fontSize: 12,
-          lineNumbers: "on",
-          scrollBeyondLastLine: false,
-          wordWrap: "off",
-          automaticLayout: true,
-        }}
-      />
+      {err && <div className="code-pane-err">{err}</div>}
+      {!err && content !== null
+        ? <Editor
+            height="100%"
+            theme="vs-dark"
+            language={langFromPath(resolvedPath)}
+            value={content}
+            options={{
+              readOnly: false,
+              minimap: { enabled: true },
+              fontSize: 12,
+              lineNumbers: "on",
+              scrollBeyondLastLine: false,
+              wordWrap: "off",
+              automaticLayout: true,
+            }}
+          />
+        : !err && <div className="code-pane-empty">
+            <span>No file open.</span>
+            <button onClick={pickFile}>Open a file</button>
+            <span className="dim">or send a prompt — editor auto-opens when the agent edits a file</span>
+          </div>
+      }
     </div>
   );
 }
@@ -691,9 +711,11 @@ function App() {
               </div>
             </footer>
             </div>{/* split-chat */}
-            {activeSession.activeFile && (
-              <CodePane filePath={activeSession.activeFile} repoPath={activeWt.path} />
-            )}
+            <CodePane
+              filePath={activeSession.activeFile ?? ""}
+              repoPath={activeWt.path}
+              onOpenFile={fp => patchSession(activeSession.id, () => ({ activeFile: fp }))}
+            />
             </SplitPane>
           </>
         )}
