@@ -151,3 +151,35 @@ export function parseLine(agent: AgentId, stream: "stdout" | "stderr", line: str
       return parseCopilot(line);
   }
 }
+
+// ---- Transcript file parser (internal .jsonl format, different from stream-json) ----
+// Used when replaying history from ~/.claude/projects/<dir>/<id>.jsonl
+
+export function parseTranscriptLine(line: string): Parsed {
+  let ev: any;
+  try { ev = JSON.parse(line); } catch { return { items: [] }; }
+  const items: Item[] = [];
+
+  if (ev.type === "user" && ev.message?.content) {
+    const content = ev.message.content;
+    const text = typeof content === "string" ? content : null;
+    if (text?.trim()) items.push({ kind: "text", text: `❯ ${text.trim()}` });
+    // user turn may also contain tool_result blocks from a prior tool call
+    if (Array.isArray(content)) {
+      for (const b of content) {
+        if (b.type === "tool_result") {
+          const c = typeof b.content === "string" ? b.content
+            : Array.isArray(b.content) ? b.content.map((x: any) => x.text ?? "").join("") : "";
+          if (c.trim()) items.push({ kind: "tool_result", text: clip(c) });
+        }
+      }
+    }
+  } else if (ev.type === "assistant" && Array.isArray(ev.message?.content)) {
+    for (const b of ev.message.content) {
+      if (b.type === "text" && b.text?.trim()) items.push({ kind: "assistant", text: b.text });
+      else if (b.type === "thinking" && b.thinking?.trim()) items.push({ kind: "reasoning", text: b.thinking });
+      else if (b.type === "tool_use") items.push({ kind: "tool", text: `▶ ${b.name}  ${summarizeInput(b.input)}` });
+    }
+  }
+  return { items };
+}

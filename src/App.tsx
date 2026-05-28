@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { AGENTS, AgentId, Item, parseLine, SEED_SLASH } from "./agents";
+import { AGENTS, AgentId, Item, parseLine, parseTranscriptLine, SEED_SLASH } from "./agents";
 import "./App.css";
 
 interface StreamLine { run_id: string; stream: "stdout" | "stderr"; line: string; }
@@ -211,7 +211,7 @@ function App() {
       const lines = await invoke<string[]>("load_session_history", { sessionId: sessId, cwd: activeWt!.path });
       const items: Item[] = [];
       for (const line of lines) {
-        const parsed = parseLine("claude", "stdout", line);
+        const parsed = parseTranscriptLine(line);
         items.push(...parsed.items);
       }
       if (items.length) patchSession(activeSession!.id, () => ({ items, sessionId: sessId }));
