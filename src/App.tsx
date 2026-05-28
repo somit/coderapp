@@ -334,7 +334,7 @@ function langFromPath(p: string): string {
   return map[ext] ?? "plaintext";
 }
 
-type ViewMode = "editor" | "diff" | "git-diff";
+type ViewMode = "editor" | "diff" | "git-diff" | "preview";
 
 function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
   filePath: string;
@@ -412,10 +412,10 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
             : <span className="code-pane-path dim">no file open</span>
           }
           <div className="view-tabs">
-            {(["editor","diff","git-diff"] as ViewMode[]).map(v => (
+            {(["editor","diff","git-diff","preview"] as ViewMode[]).map(v => (
               <button key={v} className={`view-tab ${view === v ? "active" : ""}`}
                 onClick={() => setView(v)}>
-                {v === "editor" ? "Editor" : v === "diff" ? "Diff" : "Git Diff"}
+                {v === "editor" ? "Editor" : v === "diff" ? "Diff" : v === "git-diff" ? "Git Diff" : "Preview"}
               </button>
             ))}
           </div>
@@ -453,6 +453,32 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
             : <div className="code-pane-empty">
                 <span>{agentRunning ? "Waiting for changes…" : "No uncommitted changes"}</span>
               </div>
+        )}
+
+        {view === "preview" && (
+          content !== null
+            ? (() => {
+                const ext = resolvedPath.split(".").pop()?.toLowerCase() ?? "";
+                if (ext === "html" || ext === "htm") {
+                  return (
+                    <iframe
+                      className="preview-frame"
+                      srcDoc={content}
+                      sandbox="allow-scripts allow-same-origin"
+                      title="HTML Preview"
+                    />
+                  );
+                }
+                // md / mdx / txt — render as markdown
+                return (
+                  <div className="preview-md">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}>
+                      {content}
+                    </ReactMarkdown>
+                  </div>
+                );
+              })()
+            : <div className="code-pane-empty"><span>Open a file to preview</span></div>
         )}
       </div>
       <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />
