@@ -176,11 +176,16 @@ body {
 .split-chat {
   display: flex;
   flex-direction: column;
-  flex: 0 0 420px;
-  min-width: 280px;
   overflow: hidden;
-  border-right: 1px solid var(--border);
 }
+.split-handle {
+  width: 4px;
+  flex-shrink: 0;
+  background: var(--border);
+  cursor: col-resize;
+  transition: background 0.15s;
+}
+.split-handle:hover, .split-handle:active { background: var(--accent); }
 .code-pane {
   flex: 1;
   display: flex;

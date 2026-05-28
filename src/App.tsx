@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -85,6 +85,51 @@ function loadProjects(): Project[] {
 function loadSlash(): Record<AgentId, string[]> {
   try { const r = localStorage.getItem(SLASH_KEY); if (r) return { ...SEED_SLASH, ...JSON.parse(r) }; } catch {}
   return { ...SEED_SLASH };
+}
+
+function SplitPane({ children }: { children: React.ReactNode }) {
+  const [chatWidth, setChatWidth] = useState(420);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startW = useRef(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    dragging.current = true;
+    startX.current = e.clientX;
+    startW.current = chatWidth;
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current || !containerRef.current) return;
+      const totalW = containerRef.current.offsetWidth;
+      const delta = e.clientX - startX.current;
+      const next = Math.min(Math.max(startW.current + delta, 200), totalW - 200);
+      setChatWidth(next);
+    };
+    const onUp = () => { dragging.current = false; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  const arr = React.Children.toArray(children);
+  const left = arr[0];
+  const right = arr[1];
+
+  return (
+    <div className="split" ref={containerRef}>
+      <div style={{ width: chatWidth, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {left}
+      </div>
+      {right && <>
+        <div className="split-handle" onMouseDown={onMouseDown} />
+        {right}
+      </>}
+    </div>
+  );
 }
 
 function langFromPath(p: string): string {
@@ -578,7 +623,7 @@ function App() {
               {resumeNote && <span className="note">{resumeNote}</span>}
             </div>
 
-            <div className="split">
+            <SplitPane>
             <div className="split-chat">
             <main className="transcript">
               {activeSession.items.length === 0 && (
@@ -649,7 +694,7 @@ function App() {
             {activeSession.activeFile && (
               <CodePane filePath={activeSession.activeFile} repoPath={activeWt.path} />
             )}
-            </div>{/* split */}
+            </SplitPane>
           </>
         )}
       </div>
