@@ -169,6 +169,14 @@ function App() {
   }, [projects]);
   useEffect(() => { localStorage.setItem(SLASH_KEY, JSON.stringify(slashByAgent)); }, [slashByAgent]);
 
+  // Fetch live slash commands from claude init on startup (uses any valid cwd)
+  useEffect(() => {
+    const cwd = projects.flatMap(p => p.worktrees)[0]?.path ?? "/tmp";
+    invoke<string[]>("fetch_slash_commands", { cwd })
+      .then(cmds => { if (cmds.length) setSlashByAgent(prev => ({ ...prev, claude: cmds })); })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const unEvent = listen<StreamLine>("agent-event", e => {
       const { run_id, stream, line } = e.payload;
@@ -209,21 +217,23 @@ function App() {
 
     async function loadHistory(sessId: string) {
       const lines = await invoke<string[]>("load_session_history", { sessionId: sessId, cwd: activeWt!.path });
+      console.log(`[history] sessId=${sessId} cwd=${activeWt!.path} lines=${lines.length}`);
       const items: Item[] = [];
       for (const line of lines) {
         const parsed = parseTranscriptLine(line);
         items.push(...parsed.items);
       }
+      console.log(`[history] parsed items=${items.length}`);
       if (items.length) patchSession(activeSession!.id, () => ({ items, sessionId: sessId }));
     }
 
     if (activeSession.sessionId) {
-      loadHistory(activeSession.sessionId).catch(() => {});
+      console.log(`[history] known sessId=${activeSession.sessionId}`);
+      loadHistory(activeSession.sessionId).catch(e => console.error("[history] error", e));
     } else {
-      // auto-discover most recent session for this path
       invoke<string>("latest_session_id", { cwd: activeWt.path })
-        .then(id => { if (id) loadHistory(id); })
-        .catch(() => {});
+        .then(id => { console.log(`[history] discovered id=${id}`); if (id) loadHistory(id); })
+        .catch(e => console.error("[history] discover error", e));
     }
   }, [activeSession?.id]);
 

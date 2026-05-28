@@ -36,7 +36,8 @@ fn home() -> String {
 // ---- session history replay ----
 
 fn claude_project_dir(cwd: &str) -> String {
-    let slug = cwd.replace('/', "-");
+    // Claude Code slugifies the cwd by replacing every non-alphanumeric char with '-'
+    let slug: String = cwd.chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect();
     format!("{}/.claude/projects/{}", home(), slug)
 }
 
@@ -74,6 +75,44 @@ fn latest_session_id(cwd: String) -> String {
         }
     }
     best.map(|(_, id)| id).unwrap_or_default()
+}
+
+// ---- fetch slash commands from claude init event ----
+
+/// Spawn `claude --output-format stream-json -p ""` in a throwaway way,
+/// read only the first `system/init` line, extract `slash_commands`, kill.
+#[tauri::command]
+fn fetch_slash_commands(cwd: String) -> Vec<String> {
+    let bin = resolve_bin("claude");
+    let mut child = match std::process::Command::new(&bin)
+        .current_dir(&cwd)
+        .args(["-p", "", "--output-format", "stream-json", "--dangerously-skip-permissions"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    let mut cmds: Vec<String> = vec![];
+    if let Some(stdout) = child.stdout.take() {
+        let reader = StdBufReader::new(stdout);
+        for line in reader.lines().filter_map(|l| l.ok()) {
+            if let Ok(ev) = serde_json::from_str::<serde_json::Value>(&line) {
+                if ev["type"] == "system" && ev["subtype"] == "init" {
+                    if let Some(arr) = ev["slash_commands"].as_array() {
+                        cmds = arr.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+                    }
+                    break; // got what we need
+                }
+            }
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    cmds
 }
 
 // ---- git worktree management ----
@@ -337,6 +376,7 @@ pub fn run() {
             send_message,
             load_session_history,
             latest_session_id,
+            fetch_slash_commands,
             list_worktrees,
             create_worktree,
             remove_worktree

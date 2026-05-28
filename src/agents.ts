@@ -162,15 +162,15 @@ export function parseTranscriptLine(line: string): Parsed {
 
   if (ev.type === "user" && ev.message?.content) {
     const content = ev.message.content;
-    const text = typeof content === "string" ? content : null;
-    if (text?.trim()) items.push({ kind: "text", text: `❯ ${text.trim()}` });
-    // user turn may also contain tool_result blocks from a prior tool call
-    if (Array.isArray(content)) {
+    if (typeof content === "string" && content.trim()) {
+      // plain string = actual user prompt
+      items.push({ kind: "text", text: `❯ ${content.trim()}` });
+    } else if (Array.isArray(content)) {
+      // array = mixed blocks; show text blocks as user prompts, skip tool_results
+      // (tool_results are internal and shown via the preceding tool_use in the assistant turn)
       for (const b of content) {
-        if (b.type === "tool_result") {
-          const c = typeof b.content === "string" ? b.content
-            : Array.isArray(b.content) ? b.content.map((x: any) => x.text ?? "").join("") : "";
-          if (c.trim()) items.push({ kind: "tool_result", text: clip(c) });
+        if (b.type === "text" && b.text?.trim()) {
+          items.push({ kind: "text", text: `❯ ${b.text.trim()}` });
         }
       }
     }
