@@ -88,9 +88,10 @@ function loadSlash(): Record<AgentId, string[]> {
   return { ...SEED_SLASH };
 }
 
-function TermPanel({ wtId, cwd, open, height, onToggle, onResize }: {
-  wtId: string; cwd: string; open: boolean; height: number;
+function TermPanel({ cwd, open, height, onToggle, onResize, children }: {
+  cwd: string; open: boolean; height: number;
   onToggle: () => void; onResize: (h: number) => void;
+  children?: React.ReactNode;
 }) {
   const dragging = useRef(false);
   const startY = useRef(0);
@@ -120,11 +121,8 @@ function TermPanel({ wtId, cwd, open, height, onToggle, onResize }: {
           <span className="term-cwd">{cwd.split("/").pop()}</span>
         </button>
       </div>
-      {open && (
-        <div className="term-body">
-          <Terminal id={wtId} cwd={cwd} visible={open} />
-        </div>
-      )}
+      {/* Terminal instances rendered by parent, shown/hidden here */}
+      {open && <div className="term-body">{children}</div>}
     </div>
   );
 }
@@ -342,7 +340,6 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
 
   return (
     <div className="code-pane">
-      <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />
       <div className="code-editor-area">
         <div className="code-pane-header">
           {relPath
@@ -393,6 +390,7 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
               </div>
         )}
       </div>
+      <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />
     </div>
   );
 }
@@ -476,6 +474,7 @@ function App() {
   const [usageMap, setUsageMap] = useState<Record<string, Usage[]>>(loadUsage);
   const [awake, setAwake] = useState(false);
   const [termOpen, setTermOpen] = useState(false);
+  const [openedTerms, setOpenedTerms] = useState<{id: string; cwd: string}[]>([]);
   const [termHeight, setTermHeight] = useState(220);
   const [chatWidth, setChatWidth] = useState(420);
   const paneRef = useRef<HTMLDivElement>(null);
@@ -938,13 +937,26 @@ function App() {
             />
             </SplitPane>
             <TermPanel
-              wtId={activeWt.id}
               cwd={activeWt.path}
               open={termOpen}
               height={termHeight}
-              onToggle={() => setTermOpen(o => !o)}
+              onToggle={() => {
+                if (!termOpen) {
+                  setOpenedTerms(prev =>
+                    prev.find(t => t.id === activeWt.id) ? prev : [...prev, { id: activeWt.id, cwd: activeWt.path }]
+                  );
+                }
+                setTermOpen(o => !o);
+              }}
               onResize={setTermHeight}
-            />
+            >
+              {/* all opened terminals stay mounted; only active one is visible */}
+              {openedTerms.map(t => (
+                <div key={t.id} style={{ width: "100%", height: "100%", display: t.id === activeWt.id ? "block" : "none" }}>
+                  <Terminal id={t.id} cwd={t.cwd} visible={termOpen && t.id === activeWt.id} />
+                </div>
+              ))}
+            </TermPanel>
           </>
         )}
       </div>
