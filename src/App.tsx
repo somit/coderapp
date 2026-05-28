@@ -552,7 +552,7 @@ function App() {
   const [termOpen, setTermOpen] = useState(false);
   const [openedTerms, setOpenedTerms] = useState<{id: string; cwd: string}[]>([]);
   const [termHeight, setTermHeight] = useState(220);
-  const [chatWidth, setChatWidth] = useState(420);
+  const [chatWidth, setChatWidth] = useState<number | null>(null); // null = 50/50 on first render
   const paneRef = useRef<HTMLDivElement>(null);
 
   const runMap = useRef<Record<string, string>>({}); // run_id -> session id
@@ -940,7 +940,7 @@ function App() {
               {resumeNote && <span className="note">{resumeNote}</span>}
             </div>
 
-            <SplitPane chatWidth={chatWidth} onChatWidthChange={setChatWidth}>
+            <SplitPane chatWidth={chatWidth ?? Math.round((paneRef.current?.offsetWidth ?? 800) * 0.5)} onChatWidthChange={setChatWidth}>
             <div className="split-chat">
             <main className="transcript">
               {activeSession.items.length === 0 && (
