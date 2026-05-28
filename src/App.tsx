@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github-dark.css";
 import Editor, { DiffEditor } from "@monaco-editor/react";
@@ -506,7 +505,7 @@ class MdRenderer extends React.Component<{ text: string; onError: () => void }, 
   render() {
     if (this.state.err) return <pre className="md-raw">{this.props.text}</pre>;
     return (
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeHighlight]}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
         {this.props.text}
       </ReactMarkdown>
     );
