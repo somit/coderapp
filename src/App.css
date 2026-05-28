@@ -207,7 +207,7 @@ body {
   width: 200px;
   flex-shrink: 0;
   background: #252526;
-  border-right: 1px solid #3c3c3c;
+  border-left: 1px solid #3c3c3c;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -302,6 +302,52 @@ body {
   font: inherit;
 }
 .code-pane-empty .dim { font-size: 11px; color: #444; }
+
+/* ---- terminal panel ---- */
+.term-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  background: #0d1117;
+  overflow: hidden;
+}
+.term-drag-handle {
+  height: 4px;
+  cursor: row-resize;
+  background: transparent;
+  flex-shrink: 0;
+}
+.term-drag-handle:hover { background: var(--accent); }
+.term-titlebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.term-toggle {
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+.term-toggle:hover { color: var(--text); }
+.term-cwd {
+  color: var(--green);
+  font-size: 11px;
+  margin-left: 4px;
+}
+.term-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 4px 4px 4px 8px;
+}
 
 /* ---- token / cost badges ---- */
 .cost-badge {

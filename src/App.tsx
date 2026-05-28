@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { AGENTS, AgentId, Item, Usage, parseLine, parseTranscriptLine, parseCodexTranscriptLine, SEED_SLASH } from "./agents";
+import { Terminal } from "./Terminal";
 import "./App.css";
 
 interface StreamLine { run_id: string; stream: "stdout" | "stderr"; line: string; }
@@ -85,6 +86,47 @@ function loadProjects(): Project[] {
 function loadSlash(): Record<AgentId, string[]> {
   try { const r = localStorage.getItem(SLASH_KEY); if (r) return { ...SEED_SLASH, ...JSON.parse(r) }; } catch {}
   return { ...SEED_SLASH };
+}
+
+function TermPanel({ wtId, cwd, open, height, onToggle, onResize }: {
+  wtId: string; cwd: string; open: boolean; height: number;
+  onToggle: () => void; onResize: (h: number) => void;
+}) {
+  const dragging = useRef(false);
+  const startY = useRef(0);
+  const startH = useRef(0);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = startY.current - e.clientY;
+      onResize(Math.min(Math.max(startH.current + delta, 80), 600));
+    };
+    const onUp = () => { dragging.current = false; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  return (
+    <div className="term-panel" style={{ height: open ? height : "auto" }}>
+      <div className="term-titlebar">
+        {open && (
+          <div className="term-drag-handle"
+            onMouseDown={e => { dragging.current = true; startY.current = e.clientY; startH.current = height; e.preventDefault(); }} />
+        )}
+        <button className="term-toggle" onClick={onToggle}>
+          <span>{open ? "▾" : "▸"}</span> Terminal
+          <span className="term-cwd">{cwd.split("/").pop()}</span>
+        </button>
+      </div>
+      {open && (
+        <div className="term-body">
+          <Terminal id={wtId} cwd={cwd} visible={open} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SplitPane({ children }: { children: React.ReactNode }) {
@@ -287,7 +329,6 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
 
   return (
     <div className="code-pane">
-      <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />
       <div className="code-editor-area">
         <div className="code-pane-header">
           {relPath
@@ -338,6 +379,7 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
               </div>
         )}
       </div>
+      <FileTree root={repoPath} onSelect={fp => onOpenFile(fp)} activeFile={resolvedPath} />
     </div>
   );
 }
@@ -419,6 +461,8 @@ function App() {
   const [newName, setNewName] = useState("");
   const [err, setErr] = useState("");
   const [usageMap, setUsageMap] = useState<Record<string, Usage[]>>(loadUsage);
+  const [termOpen, setTermOpen] = useState(false);
+  const [termHeight, setTermHeight] = useState(220);
 
   const runMap = useRef<Record<string, string>>({}); // run_id -> session id
   const runAgent = useRef<Record<string, AgentId>>({});
@@ -852,6 +896,14 @@ function App() {
               onOpenFile={fp => patchSession(activeSession.id, () => ({ activeFile: fp }))}
             />
             </SplitPane>
+            <TermPanel
+              wtId={activeWt.id}
+              cwd={activeWt.path}
+              open={termOpen}
+              height={termHeight}
+              onToggle={() => setTermOpen(o => !o)}
+              onResize={setTermHeight}
+            />
           </>
         )}
       </div>
