@@ -786,6 +786,20 @@ function App() {
         </div>
         {err && <div className="side-err" onClick={() => setErr("")}>{err}</div>}
         <div className="side-footer">
+          <div className="layout-presets side-presets">
+            {([
+              { label: "⬛▫", title: "Chat 2/3 · Code 1/3", chat: 2/3 },
+              { label: "▪▪",  title: "50 / 50",              chat: 1/2 },
+              { label: "▫⬛", title: "Chat 1/3 · Code 2/3", chat: 1/3 },
+              { label: "⬛",  title: "Chat only",             chat: 1   },
+              { label: "▫",  title: "Code only",              chat: 0   },
+            ] as const).map(p => (
+              <button key={p.label} className="layout-btn" title={p.title}
+                onClick={() => setChatWidth(Math.round((paneRef.current?.offsetWidth ?? 800) * p.chat))}>
+                {p.label}
+              </button>
+            ))}
+          </div>
           <button
             className={`awake-btn ${awake ? "on" : ""}`}
             title={awake ? "Mac awake — click to allow sleep" : "Click to keep Mac awake"}
@@ -793,7 +807,7 @@ function App() {
               if (awake) { invoke("caffeinate_off").then(() => setAwake(false)); }
               else { invoke("caffeinate_on").then(() => setAwake(true)).catch(() => {}); }
             }}>
-            {awake ? "☕ awake" : "💤 sleep"}
+            {awake ? "☕" : "💤"}
           </button>
         </div>
       </aside>
@@ -804,26 +818,8 @@ function App() {
           <div className="empty">Add a project from the sidebar to start.</div>
         ) : (
           <>
-            {/* session tabs + layout presets */}
+            {/* session tabs */}
             <div className="session-tabs">
-              {/* layout presets — left side */}
-              <div className="layout-presets">
-                {([
-                  { label: "⬛▫", title: "Chat 2/3 · Code 1/3", chat: 2/3 },
-                  { label: "▪▪", title: "50 / 50",              chat: 1/2 },
-                  { label: "▫⬛", title: "Chat 1/3 · Code 2/3", chat: 1/3 },
-                  { label: "⬛", title: "Chat only",             chat: 1   },
-                  { label: "▫", title: "Code only",              chat: 0   },
-                ] as const).map(p => (
-                  <button key={p.label} className="layout-btn" title={p.title}
-                    onClick={() => {
-                      const total = paneRef.current?.offsetWidth ?? 800;
-                      setChatWidth(Math.round(total * p.chat));
-                    }}>
-                    {p.label}
-                  </button>
-                ))}
-              </div>
               {activeWt.sessions.map(s => {
                 const sessUsage = sumUsage(usageMap[s.sessionId] ?? usageMap[s.id] ?? []);
                 const costLabel = fmt(sessUsage);

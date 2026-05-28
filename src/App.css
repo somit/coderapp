@@ -63,11 +63,15 @@ body {
 .side-head .add.small { width: 18px; height: 18px; font-size: 12px; }
 .side-empty { padding: 14px 12px; color: var(--dim); font-size: 12px; line-height: 1.5; }
 .side-footer {
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.side-footer .awake-btn { width: 100%; justify-content: center; display: flex; }
+.side-presets { border-right: none; margin-right: 0; flex: 1; }
+.side-footer .awake-btn { flex-shrink: 0; }
 .side-err {
   padding: 8px 12px; font-size: 11px; color: var(--err);
   border-top: 1px solid var(--border); cursor: pointer;
