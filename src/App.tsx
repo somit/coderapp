@@ -412,10 +412,10 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
             : <span className="code-pane-path dim">no file open</span>
           }
           <div className="view-tabs">
-            {(["editor","diff","git-diff","preview"] as ViewMode[]).map(v => (
+            {(["preview","editor","diff","git-diff"] as ViewMode[]).map(v => (
               <button key={v} className={`view-tab ${view === v ? "active" : ""}`}
                 onClick={() => setView(v)}>
-                {v === "editor" ? "Editor" : v === "diff" ? "Diff" : v === "git-diff" ? "Git Diff" : "Preview"}
+                {v === "preview" ? "Preview" : v === "editor" ? "Editor" : v === "diff" ? "Diff" : "Git Diff"}
               </button>
             ))}
           </div>
@@ -423,44 +423,36 @@ function CodePane({ filePath, repoPath, onOpenFile, agentRunning }: {
         </div>
         {err && <div className="code-pane-err">{err}</div>}
 
-        {/* Editor + Preview side by side */}
-        {(view === "editor" || view === "preview") && (
-          <div className="editor-preview-split">
-            <div className={view === "preview" ? "editor-half" : "editor-full"}>
-              {content !== null
-                ? <Editor height="100%" theme="vs-dark" language={langFromPath(resolvedPath)}
-                    value={content}
-                    options={{ readOnly: false, minimap: { enabled: view !== "preview" }, fontSize: 12,
-                      lineNumbers: "on", scrollBeyondLastLine: false, automaticLayout: true }} />
-                : <div className="code-pane-empty">
-                    <span>Click a file in the tree</span>
-                    <span className="dim">or the agent will open it automatically</span>
+        {!err && view === "editor" && (
+          content !== null
+            ? <Editor height="100%" theme="vs-dark" language={langFromPath(resolvedPath)}
+                value={content}
+                options={{ readOnly: false, minimap: { enabled: true }, fontSize: 12,
+                  lineNumbers: "on", scrollBeyondLastLine: false, automaticLayout: true }} />
+            : <div className="code-pane-empty">
+                <span>Click a file in the tree</span>
+                <span className="dim">or the agent will open it automatically</span>
+              </div>
+        )}
+
+        {view === "preview" && (
+          content !== null
+            ? (() => {
+                const ext = resolvedPath.split(".").pop()?.toLowerCase() ?? "";
+                if (ext === "html" || ext === "htm") {
+                  return <iframe className="preview-frame" srcDoc={content}
+                    sandbox="allow-scripts allow-same-origin" title="HTML Preview" />;
+                }
+                return (
+                  <div className="preview-md">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}>
+                      {content}
+                    </ReactMarkdown>
                   </div>
-              }
-            </div>
-            {view === "preview" && content !== null && (
-              <>
-                <div className="editor-divider" />
-                <div className="preview-half">
-                  {(() => {
-                    const ext = resolvedPath.split(".").pop()?.toLowerCase() ?? "";
-                    if (ext === "html" || ext === "htm") {
-                      return <iframe className="preview-frame" srcDoc={content}
-                        sandbox="allow-scripts allow-same-origin" title="HTML Preview" />;
-                    }
-                    return (
-                      <div className="preview-md">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeHighlight]}>
-                          {content}
-                        </ReactMarkdown>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </>
-            )}
-          </div>
+                );
+              })()
+            : <div className="code-pane-empty"><span>Open a file to preview</span></div>
         )}
 
         {!err && view === "diff" && (
