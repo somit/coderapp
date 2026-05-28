@@ -132,6 +132,77 @@ function SplitPane({ children }: { children: React.ReactNode }) {
   );
 }
 
+interface FileNode { name: string; path: string; is_dir: boolean; children: FileNode[]; }
+
+function FileTree({ root, onSelect, activeFile }: {
+  root: string;
+  onSelect: (path: string) => void;
+  activeFile: string;
+}) {
+  const [nodes, setNodes] = useState<FileNode[]>([]);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!root) return;
+    invoke<FileNode[]>("list_files", { root }).then(setNodes).catch(() => {});
+  }, [root]);
+
+  function toggle(path: string) {
+    setOpen(prev => {
+      const next = new Set(prev);
+      next.has(path) ? next.delete(path) : next.add(path);
+      return next;
+    });
+  }
+
+  function renderNode(node: FileNode, depth: number): React.ReactNode {
+    const indent = depth * 12;
+    if (node.is_dir) {
+      const isOpen = open.has(node.path);
+      return (
+        <div key={node.path}>
+          <div className="ft-row ft-dir" style={{ paddingLeft: indent + 6 }}
+            onClick={() => toggle(node.path)}>
+            <span className="ft-arrow">{isOpen ? "▾" : "▸"}</span>
+            <span className="ft-icon">📁</span>
+            <span className="ft-name">{node.name}</span>
+          </div>
+          {isOpen && node.children.map(c => renderNode(c, depth + 1))}
+        </div>
+      );
+    }
+    return (
+      <div key={node.path}
+        className={`ft-row ft-file ${node.path === activeFile ? "active" : ""}`}
+        style={{ paddingLeft: indent + 6 }}
+        onClick={() => onSelect(node.path)}>
+        <span className="ft-icon">{fileIcon(node.name)}</span>
+        <span className="ft-name">{node.name}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="file-tree">
+      <div className="ft-header">Explorer</div>
+      <div className="ft-body">{nodes.map(n => renderNode(n, 0))}</div>
+    </div>
+  );
+}
+
+function fileIcon(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (["ts","tsx"].includes(ext)) return "𝙏";
+  if (["js","jsx"].includes(ext)) return "𝙅";
+  if (ext === "rs") return "🦀";
+  if (ext === "go") return "𝙂";
+  if (ext === "py") return "𝙋";
+  if (["md","mdx"].includes(ext)) return "📝";
+  if (["json","toml","yaml","yml"].includes(ext)) return "⚙";
+  if (["png","jpg","jpeg","gif","svg","webp"].includes(ext)) return "🖼";
+  return "📄";
+}
+
 function langFromPath(p: string): string {
   const ext = p.split(".").pop()?.toLowerCase() ?? "";
   const map: Record<string, string> = {
@@ -174,36 +245,38 @@ function CodePane({ filePath, repoPath, onOpenFile }: {
 
   return (
     <div className="code-pane">
-      <div className="code-pane-header">
-        {resolvedPath
-          ? <span className="code-pane-path">{resolvedPath}</span>
-          : <span className="code-pane-path dim">no file open</span>
+      <FileTree root={repoPath} onSelect={fp => { onOpenFile(fp); }} activeFile={resolvedPath} />
+      <div className="code-editor-area">
+        <div className="code-pane-header">
+          {resolvedPath
+            ? <span className="code-pane-path">{resolvedPath.replace(repoPath + "/", "")}</span>
+            : <span className="code-pane-path dim">no file open</span>
+          }
+          <button className="code-open-btn" onClick={pickFile} title="Open file">open…</button>
+        </div>
+        {err && <div className="code-pane-err">{err}</div>}
+        {!err && content !== null
+          ? <Editor
+              height="100%"
+              theme="vs-dark"
+              language={langFromPath(resolvedPath)}
+              value={content}
+              options={{
+                readOnly: false,
+                minimap: { enabled: true },
+                fontSize: 12,
+                lineNumbers: "on",
+                scrollBeyondLastLine: false,
+                wordWrap: "off",
+                automaticLayout: true,
+              }}
+            />
+          : !err && <div className="code-pane-empty">
+              <span>Click a file in the tree</span>
+              <span className="dim">or the agent will open one automatically</span>
+            </div>
         }
-        <button className="code-open-btn" onClick={pickFile} title="Open file">open…</button>
       </div>
-      {err && <div className="code-pane-err">{err}</div>}
-      {!err && content !== null
-        ? <Editor
-            height="100%"
-            theme="vs-dark"
-            language={langFromPath(resolvedPath)}
-            value={content}
-            options={{
-              readOnly: false,
-              minimap: { enabled: true },
-              fontSize: 12,
-              lineNumbers: "on",
-              scrollBeyondLastLine: false,
-              wordWrap: "off",
-              automaticLayout: true,
-            }}
-          />
-        : !err && <div className="code-pane-empty">
-            <span>No file open.</span>
-            <button onClick={pickFile}>Open a file</button>
-            <span className="dim">or send a prompt — editor auto-opens when the agent edits a file</span>
-          </div>
-      }
     </div>
   );
 }

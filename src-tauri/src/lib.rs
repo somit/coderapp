@@ -150,11 +150,56 @@ fn latest_codex_session(cwd: String) -> String {
     String::new()
 }
 
-// ---- file read for editor ----
+// ---- file read + tree for editor ----
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[derive(Serialize, Clone)]
+struct FileNode {
+    name: String,
+    path: String,
+    is_dir: bool,
+    children: Vec<FileNode>,
+}
+
+fn build_tree(dir: &std::path::Path, depth: u32) -> Vec<FileNode> {
+    if depth == 0 { return vec![]; }
+    let mut entries = match std::fs::read_dir(dir) {
+        Ok(e) => e.filter_map(|e| e.ok()).collect::<Vec<_>>(),
+        Err(_) => return vec![],
+    };
+    entries.sort_by_key(|e| {
+        let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        (!is_dir, e.file_name()) // dirs first, then alpha
+    });
+    entries.iter().filter_map(|entry| {
+        let name = entry.file_name().to_string_lossy().to_string();
+        // skip hidden files/dirs and common noise
+        if name.starts_with('.') || name == "node_modules" || name == "target"
+            || name == "dist" || name == "__pycache__" { return None; }
+        let path = entry.path();
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let children = if is_dir { build_tree(&path, depth - 1) } else { vec![] };
+        Some(FileNode {
+            name,
+            path: path.to_string_lossy().to_string(),
+            is_dir,
+            children,
+        })
+    }).collect()
+}
+
+#[tauri::command]
+fn list_files(root: String) -> Vec<FileNode> {
+    build_tree(std::path::Path::new(&root), 6)
+}
+
+#[tauri::command]
+fn list_dir(path: String) -> Vec<FileNode> {
+    build_tree(std::path::Path::new(&path), 1)
 }
 
 // ---- fetch slash commands from claude init event ----
@@ -455,6 +500,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             send_message,
             read_file,
+            list_files,
+            list_dir,
             load_session_history,
             latest_session_id,
             load_codex_session,
